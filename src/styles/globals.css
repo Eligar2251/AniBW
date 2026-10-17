@@ -1,0 +1,148 @@
+/* src/styles/globals.css */
+
+@import "./variables.css";
+@import "./animations.css";
+
+@font-face {
+  font-family: "Retronom Regular";
+  src: url("/fonts/Retronom-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.7;
+  min-height: 100vh;
+  overflow-x: hidden;
+
+  /* Шумовая текстура поверх всего */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+/* Скроллбар */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dim);
+}
+
+/* Выделение текста */
+::selection {
+  background: var(--color-accent-glow);
+  color: var(--color-text-primary);
+}
+
+/* Ссылки */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Изображения */
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* Кнопки */
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+/* Инпуты */
+input,
+textarea,
+select {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+/* Утилиты */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.container {
+  width: 100%;
+  max-width: var(--container-lg);
+  margin: 0 auto;
+  padding: 0 var(--space-8);
+}
+
+.container--sm {
+  max-width: var(--container-sm);
+}
+.container--md {
+  max-width: var(--container-md);
+}
+.container--xl {
+  max-width: var(--container-xl);
+}
+
+/* Тонкая линия-делитель в японском стиле */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-border),
+    var(--color-accent-dim),
+    var(--color-border),
+    transparent
+  );
+  border: none;
+}
+
+/* Декоративный японский символ-орнамент */
+.jp-ornament {
+  font-family: var(--font-japanese);
+  font-size: var(--text-6xl);
+  color: var(--color-text-faint);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  position: absolute;
+  font-weight: 700;
+}

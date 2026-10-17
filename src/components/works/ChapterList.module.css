@@ -1,0 +1,155 @@
+/* src/components/works/ChapterList.module.css */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.listHeader {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px 80px 30px;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-2);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px 80px 30px;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+  transition: background var(--dur-fast) var(--ease-out);
+  text-decoration: none;
+}
+
+.item:hover {
+  background: var(--color-bg-raised);
+}
+
+.item:hover .itemBgNum {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Большой фоновый номер */
+.itemBgNum {
+  position: absolute;
+  right: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%) translateX(20px);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 900;
+  color: var(--color-text-faint);
+  opacity: 0;
+  transition: all var(--dur-base) var(--ease-out);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Номер главы */
+.itemNum {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+/* Название */
+.itemTitle {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition: color var(--dur-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item:hover .itemTitle {
+  color: var(--color-text-primary);
+}
+
+.lockIcon {
+  color: var(--color-amber);
+}
+
+/* Счётчик слов */
+.itemWords {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* Дата */
+.itemDate {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Статус прочитано */
+.itemStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Прочитанная глава */
+.itemRead .itemNum {
+  color: var(--color-text-muted);
+}
+.itemRead .itemTitle {
+  color: var(--color-text-muted);
+}
+
+/* Пустое состояние */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-16) 0;
+  color: var(--color-text-muted);
+}
+
+.emptyKanji {
+  font-family: var(--font-japanese);
+  font-size: var(--text-4xl);
+  color: var(--color-text-faint);
+}
+
+/* Скелетон */
+.skeletonItem {
+  height: 48px;
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 640px) {
+  .listHeader,
+  .item {
+    grid-template-columns: 40px 1fr 60px;
+  }
+  .listHeader > *:nth-child(3),
+  .listHeader > *:nth-child(5),
+  .item > *:nth-child(4),
+  .item > *:nth-child(5) {
+    display: none;
+  }
+}

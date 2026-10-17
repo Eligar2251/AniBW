@@ -1,0 +1,119 @@
+/* src/components/ui/Button.module.css */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border: none;
+  transition: all var(--dur-fast) var(--ease-out);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+/* ── Варианты ── */
+.variant-primary {
+  background: var(--color-accent);
+  color: white;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+.variant-primary:hover {
+  background: #c42338;
+  box-shadow: 0 4px 24px var(--color-accent-glow);
+  transform: translateY(-1px);
+}
+
+.variant-secondary {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+.variant-secondary:hover {
+  border-color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+}
+
+.variant-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+.variant-ghost:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.variant-amber {
+  background: var(--color-amber);
+  color: var(--color-bg);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+.variant-amber:hover {
+  box-shadow: 0 4px 24px var(--color-amber-faint);
+  transform: translateY(-1px);
+}
+
+.variant-danger {
+  background: transparent;
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}
+.variant-danger:hover {
+  background: rgba(232, 53, 74, 0.1);
+}
+
+/* ── Размеры ── */
+.size-sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+}
+.size-md {
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-sm);
+}
+.size-lg {
+  padding: var(--space-3) var(--space-8);
+  font-size: var(--text-md);
+  border-radius: var(--radius-md);
+}
+
+/* ── Лоадер ── */
+.loading {
+  pointer-events: none;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: rotateSlowly 0.7s linear infinite;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+}

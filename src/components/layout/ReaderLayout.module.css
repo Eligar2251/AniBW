@@ -1,0 +1,6 @@
+/* src/components/layout/ReaderLayout.module.css */
+
+.root {
+  min-height: 100vh;
+  background: var(--color-bg);
+}

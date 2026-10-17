@@ -1,0 +1,335 @@
+/* src/components/editor/ChapterEditor.module.css */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: all var(--dur-slow);
+}
+
+/* Режим фокуса */
+.focusMode {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  border-radius: 0;
+  background: var(--color-bg);
+  border: none;
+}
+
+/* ── Тулбар ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.toolGroup {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.toolDivider {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  margin: 0 var(--space-2);
+  flex-shrink: 0;
+}
+
+.toolBtn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  transition: all var(--dur-fast);
+  cursor: pointer;
+}
+
+.toolBtn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.toolBtnActive {
+  color: var(--color-accent);
+  background: var(--color-accent-faint);
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.toolBtnRight {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  transition: all var(--dur-fast);
+  cursor: pointer;
+}
+.toolBtnRight:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.saveBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-4);
+  background: var(--color-accent);
+  color: white;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+.saveBtn:hover {
+  background: #c42338;
+}
+.saveBtnLoading {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* ── Область редактора ── */
+.editorWrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-12) var(--space-8);
+  display: flex;
+  justify-content: center;
+}
+
+.editorOuter {
+  width: 100%;
+  max-width: 720px;
+}
+
+/* TipTap контент */
+.editorContent {
+  width: 100%;
+  max-width: 720px;
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.8;
+  color: var(--color-text-primary);
+  outline: none;
+  caret-color: var(--color-accent);
+}
+
+.editorContent p {
+  margin-bottom: 1.4em;
+}
+
+.editorContent h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 300;
+  font-style: italic;
+  color: var(--color-text-primary);
+  margin: 2em 0 0.8em;
+  text-align: center;
+}
+
+.editorContent h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 1.8em 0 0.6em;
+}
+
+.editorContent blockquote {
+  border-left: 2px solid var(--color-accent-dim);
+  padding: var(--space-4) var(--space-6);
+  margin: 2em 0;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  background: var(--color-bg-elevated);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.editorContent hr {
+  border: none;
+  text-align: center;
+  margin: 3em 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-japanese);
+  font-size: var(--text-xl);
+  letter-spacing: 0.5em;
+}
+.editorContent hr::before {
+  content: "✦ ✦ ✦";
+}
+
+.editorContent ul,
+.editorContent ol {
+  padding-left: 1.5em;
+  margin-bottom: 1.4em;
+}
+
+.editorContent li {
+  margin-bottom: 0.4em;
+}
+
+.editorContent img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  margin: 2em auto;
+}
+
+/* Placeholder */
+.editorContent p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--color-text-faint);
+  pointer-events: none;
+  height: 0;
+  font-style: italic;
+}
+
+/* Выделение текста */
+.editorContent mark {
+  background: var(--color-amber-faint);
+  color: var(--color-amber);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Превью */
+.previewContent {
+  padding: 0;
+}
+
+/* ── Статус-бар ── */
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-6);
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+  gap: var(--space-4);
+}
+
+.statusLeft,
+.statusRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 1;
+}
+
+.statusRight {
+  justify-content: flex-end;
+}
+
+.statusItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.statusCenter {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+/* Цель по словам */
+.goalWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.goalBar {
+  width: 120px;
+  height: 3px;
+  background: var(--color-surface);
+  border-radius: 2px;
+  overflow: hidden;
+  transition: box-shadow var(--dur-base);
+}
+
+.goalDone {
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+.goalFill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-dim),
+    var(--color-accent)
+  );
+  border-radius: 2px;
+  transition:
+    width var(--dur-base) var(--ease-out),
+    background var(--dur-base);
+}
+
+.goalDone .goalFill {
+  background: linear-gradient(90deg, #1a9e50, var(--color-success));
+}
+
+.goalLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Кнопка выхода из фокус-режима */
+.exitFocusBtn {
+  position: fixed;
+  bottom: var(--space-8);
+  right: var(--space-8);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  z-index: var(--z-top);
+}
+
+.exitFocusBtn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent);
+}

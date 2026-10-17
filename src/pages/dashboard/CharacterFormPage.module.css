@@ -1,0 +1,689 @@
+/* src/pages/dashboard/CharacterFormPage.module.css */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-width: 1100px;
+}
+
+.header {
+  position: relative;
+}
+
+.headerKanji {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  font-family: var(--font-japanese);
+  font-size: var(--text-5xl);
+  color: var(--color-text-faint);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  position: relative;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-10);
+  align-items: start;
+}
+
+/* ── Левая панель ── */
+.leftPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  position: sticky;
+  top: 100px;
+}
+
+.avatarUpload {
+  display: block;
+  cursor: pointer;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.avatarPreviewWrap {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.avatarPreview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center; /* ← фото по верхнему краю */
+  display: block;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.avatarUpload:hover .avatarPreview {
+  transform: scale(1.03);
+}
+
+.avatarOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 11, 18, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  opacity: 0;
+  transition: opacity var(--dur-base);
+  color: white;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.avatarUpload:hover .avatarOverlay {
+  opacity: 1;
+}
+
+.avatarPlaceholder {
+  width: 100%;
+  height: 100%;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  background: var(--color-bg-raised);
+  transition: all var(--dur-base);
+}
+
+.avatarUpload:hover .avatarPlaceholder {
+  border-color: var(--color-accent);
+  background: var(--color-accent-faint);
+}
+
+.avatarPlaceholder span:first-of-type {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.avatarPlaceholderSub {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+}
+
+/* Цвета */
+.colorSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.colorField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.colorLabel {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.colorSwatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition:
+    transform var(--dur-fast),
+    border-color var(--dur-fast);
+}
+
+.colorSwatch:hover {
+  transform: scale(1.02);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.colorSwatch span {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.colorPickerWrap {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: var(--z-overlay);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.colorPickerClose {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.colorPickerClose:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.ocLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+/* ── Правая панель ── */
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.sectionNav {
+  display: flex;
+  gap: 2px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  flex-wrap: wrap;
+}
+
+.sectionBtn {
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  letter-spacing: 0.03em;
+}
+
+.sectionBtn:hover {
+  color: var(--color-text-secondary);
+}
+
+.sectionBtnActive {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Поля */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.required {
+  color: var(--color-accent);
+}
+
+.input,
+.select {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  width: 100%;
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast),
+    background var(--dur-fast);
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-faint);
+}
+
+.select option {
+  background: var(--color-bg-elevated);
+}
+
+.textarea {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  resize: vertical;
+  width: 100%;
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast),
+    background var(--dur-fast);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-faint);
+}
+
+.input:disabled,
+.select:disabled,
+.textarea:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.fieldGrid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.fieldGrid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+/* Список полей */
+.listItems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.listItem {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.removeBtn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  flex-shrink: 0;
+  background: var(--color-bg-raised);
+}
+
+.removeBtn:hover {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.addListItemBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  letter-spacing: 0.05em;
+  align-self: flex-start;
+  background: transparent;
+}
+
+.addListItemBtn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* Навыки */
+.abilitiesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.abilityItem {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.abilityLevel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.abilityLevelLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  text-align: center;
+}
+
+.levelSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: var(--color-surface);
+  border-radius: 2px;
+  outline: none;
+}
+
+.levelSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+.levelSlider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  border: none;
+}
+
+.addAbilityBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  background: transparent;
+}
+
+.addAbilityBtn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* Бейджи */
+.badgesList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: 40px;
+}
+
+.badgeItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  letter-spacing: 0.05em;
+}
+
+.removeBadgeBtn {
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity var(--dur-fast);
+}
+
+.removeBadgeBtn:hover {
+  opacity: 1;
+}
+
+.addBadgeForm {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.addBadgeForm .input,
+.addBadgeForm .select {
+  flex: 1;
+  min-width: 120px;
+}
+
+.badgeColorSwatch {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.addBadgeBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  flex-shrink: 0;
+}
+
+.addBadgeBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Ошибка */
+.error {
+  padding: var(--space-3) var(--space-4);
+  background: rgba(232, 53, 74, 0.08);
+  border: 1px solid rgba(232, 53, 74, 0.25);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+}
+
+/* Кнопки */
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.cancelBtn {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  background: transparent;
+}
+
+.cancelBtn:hover {
+  border-color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+}
+
+.submitBtn {
+  padding: var(--space-3) var(--space-8);
+  background: var(--color-accent);
+  color: white;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 180px;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #c42338;
+  box-shadow: 0 4px 16px var(--color-accent-glow);
+}
+
+.submitBtn:disabled,
+.cancelBtn:disabled,
+.addBadgeBtn:disabled,
+.addAbilityBtn:disabled,
+.addListItemBtn:disabled,
+.removeBtn:disabled,
+.removeBadgeBtn:disabled,
+.colorPickerClose:disabled,
+.sectionBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: characterFormSpin 0.8s linear infinite;
+}
+
+@keyframes characterFormSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .leftPanel {
+    position: static;
+    flex-direction: row;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .avatarUpload {
+    width: 150px;
+    flex-shrink: 0;
+  }
+
+  .fieldGrid2,
+  .fieldGrid3 {
+    grid-template-columns: 1fr;
+  }
+
+  .formActions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .submitBtn,
+  .cancelBtn {
+    width: 100%;
+  }
+}

@@ -1,0 +1,387 @@
+/* src/pages/dashboard/board/FreeCanvas.module.css */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ── Тулбар ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.toolBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.toolBtn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+
+.toolBtnDanger {
+  composes: toolBtn;
+  color: var(--color-text-muted);
+}
+
+.toolBtnDanger:hover {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.toolSep {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  margin: 0 var(--space-1);
+  flex-shrink: 0;
+}
+
+.toolBtnSm {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.toolBtnSm:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+
+.toolZoom {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  min-width: 40px;
+  text-align: center;
+}
+
+/* Форматирование */
+.formatGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fontSizeInput {
+  width: 44px;
+  padding: 3px 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+.fontSizeInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.fontSizeLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-faint);
+  margin-right: var(--space-1);
+}
+
+.formatBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.formatBtn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+
+.formatBtnActive {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent-faint);
+}
+
+.colorPickerWrapper {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  cursor: pointer;
+}
+
+.colorPreview {
+  position: absolute;
+  inset: 3px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.colorPicker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ── Канвас ── */
+.canvas {
+  position: relative;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  height: calc(100vh - 220px);
+  min-height: 400px;
+  cursor: grab;
+}
+
+.canvas:active {
+  cursor: grabbing;
+}
+
+.canvasInner {
+  position: absolute;
+  inset: 0;
+  width: 3000px;
+  height: 3000px;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.bgKanji {
+  position: absolute;
+  right: 3%;
+  bottom: 3%;
+  font-family: var(--font-japanese);
+  font-size: 160px;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(240, 237, 232, 0.012);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ═══════════════════════════
+   Nodes — общее
+   ═══════════════════════════ */
+.node {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  will-change: left, top;
+}
+
+.node:active {
+  cursor: grabbing;
+}
+
+.nodeSelected {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ── Стикер ── */
+.node-sticky {
+  border-radius: 2px;
+  box-shadow:
+    2px 3px 12px rgba(0, 0, 0, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.15);
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - 14px),
+    calc(100% - 14px) 100%,
+    0 100%
+  );
+}
+
+.node-sticky::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.12) 50%);
+  pointer-events: none;
+}
+
+.stickyBody {
+  padding: 16px 18px;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.stickyText {
+  font-family: var(--font-body);
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.stickyEdit {
+  width: 100%;
+  height: 100%;
+  padding: 12px 14px;
+}
+
+.stickyTextarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+
+/* ── Текст ── */
+.node-text {
+  background: transparent;
+}
+
+.textBody {
+  padding: 4px 8px;
+  cursor: text;
+}
+
+.textContent {
+  font-family: var(--font-display);
+  line-height: 1.2;
+  white-space: nowrap;
+  display: block;
+}
+
+.textEdit {
+  width: 100%;
+}
+
+.textInput {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-display);
+  line-height: 1.2;
+  padding: 4px 8px;
+}
+
+/* ── Фото ── */
+.node-image {
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.nodeImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* ── Resize handles ── */
+.resizeHandle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--color-accent);
+  border: 1.5px solid white;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.rh-tl {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+.rh-tr {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+.rh-bl {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+.rh-br {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}
+.rh-t {
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.rh-b {
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.rh-l {
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+.rh-r {
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}

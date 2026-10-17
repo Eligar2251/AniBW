@@ -1,0 +1,53 @@
+/* src/components/ui/PageLoader.module.css */
+
+.wrap {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-top);
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.kanji {
+  font-family: var(--font-japanese);
+  font-size: var(--text-5xl);
+  color: var(--color-accent);
+  opacity: 0.8;
+  animation: floatY 2s ease-in-out infinite;
+}
+
+.bar {
+  width: 200px;
+  height: 1px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-accent),
+    transparent
+  );
+  transform-origin: left center;
+}
+
+.label {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-style: italic;
+}

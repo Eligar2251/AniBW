@@ -1,0 +1,112 @@
+/* src/components/layout/Footer.module.css */
+
+.footer {
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--space-24);
+  background: var(--color-bg-raised);
+}
+
+.inner {
+  max-width: var(--container-xl);
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-8);
+  display: flex;
+  gap: var(--space-16);
+  align-items: flex-start;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.brandKanji {
+  font-family: var(--font-japanese);
+  font-size: var(--text-3xl);
+  color: var(--color-accent);
+  line-height: 1;
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 300;
+  font-style: italic;
+  color: var(--color-text-primary);
+  display: block;
+}
+
+.brandSub {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.links {
+  display: flex;
+  gap: var(--space-12);
+  flex: 1;
+}
+
+.linkGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.linkGroupLabel {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-1);
+}
+
+.link {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition: color var(--dur-fast);
+}
+.link:hover {
+  color: var(--color-accent);
+}
+
+.bottom {
+  max-width: var(--container-xl);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-8);
+  border-top: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.copy {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.bottomKanji {
+  font-family: var(--font-japanese);
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+  letter-spacing: 0.1em;
+}
+
+@media (max-width: 768px) {
+  .inner {
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+  .links {
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+}

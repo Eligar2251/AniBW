@@ -1,0 +1,133 @@
+/* src/pages/SettingsPage.module.css */
+
+.page {
+  min-height: 100vh;
+  padding-top: 100px;
+  padding-bottom: var(--space-24);
+}
+
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 var(--space-8);
+}
+
+.header {
+  position: relative;
+  margin-bottom: var(--space-10);
+}
+
+.headerKanji {
+  position: absolute;
+  left: -15px;
+  top: -5px;
+  font-family: var(--font-japanese);
+  font-size: var(--text-6xl);
+  color: var(--color-text-faint);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-4xl);
+  font-weight: 900;
+  color: var(--color-text-primary);
+  position: relative;
+}
+
+.card {
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+}
+
+.cardTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.input,
+.textarea {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast);
+  resize: vertical;
+}
+
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-faint);
+}
+
+.inputDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.fieldHint {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.saveBtn {
+  padding: var(--space-3) var(--space-8);
+  background: var(--color-accent);
+  color: white;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  align-self: flex-start;
+}
+
+.saveBtn:hover:not(:disabled) {
+  background: #c42338;
+  box-shadow: 0 4px 16px var(--color-accent-glow);
+}
+
+.saveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

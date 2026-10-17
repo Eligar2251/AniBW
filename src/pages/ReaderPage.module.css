@@ -1,0 +1,366 @@
+/* src/pages/ReaderPage.module.css */
+
+.page {
+  min-height: 100vh;
+  background: var(--reader-bg, var(--color-bg));
+  color: var(--reader-text, var(--color-text-primary));
+  transition:
+    background var(--dur-slow) var(--ease-out),
+    color var(--dur-slow) var(--ease-out);
+
+  /* Тонкий шум-оверлей */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+}
+
+/* ── Хедер ── */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-8);
+  background: rgba(10, 11, 18, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-4);
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  transition: color var(--dur-fast);
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.backBtn:hover {
+  color: var(--color-text-primary);
+}
+
+.headerCenter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.headerChapter {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.headerDot {
+  color: var(--color-text-faint);
+}
+.headerTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.headerActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.headerBtn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-md);
+  transition: all var(--dur-fast);
+}
+.headerBtn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+/* ── Главный контент ── */
+.main {
+  padding-top: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+/* ── Авторская заметка ── */
+.authorNote {
+  width: 100%;
+  max-width: var(--reader-width, 680px);
+  padding: var(--space-6);
+  background: var(--reader-surface, var(--color-bg-raised));
+  border-left: 3px solid var(--color-amber);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  margin: var(--space-8) 0 0;
+}
+
+.authorNoteEnd {
+  border-color: var(--color-accent-dim);
+}
+
+.authorNoteLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-amber);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-3);
+}
+
+.authorNoteKanji {
+  font-family: var(--font-japanese);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.authorNoteText {
+  font-family: var(--reader-font, var(--font-body));
+  font-size: calc(var(--reader-size, 18px) * 0.9);
+  color: var(--reader-text, var(--color-text-secondary));
+  line-height: var(--reader-lh, 1.7);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* ── Заголовок главы ── */
+.chapterHeader {
+  width: 100%;
+  max-width: var(--reader-width, 680px);
+  padding: var(--space-16) 0 var(--space-12);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  position: relative;
+}
+
+.chapterNum {
+  font-family: var(--font-display);
+  font-size: var(--text-6xl);
+  font-weight: 900;
+  color: var(--color-accent-faint, rgba(232, 53, 74, 0.08));
+  line-height: 1;
+  position: absolute;
+  top: var(--space-10);
+  left: -20px;
+  pointer-events: none;
+  user-select: none;
+  -webkit-text-stroke: 1px rgba(232, 53, 74, 0.12);
+  color: transparent;
+}
+
+.chapterTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 300;
+  color: var(--reader-text, var(--color-text-primary));
+  line-height: 1.2;
+  font-style: italic;
+  position: relative;
+}
+
+.chapterMeta {
+  display: flex;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.1em;
+}
+
+/* ── Текст ── */
+.content {
+  width: 100%;
+  max-width: var(--reader-width, 680px);
+  font-family: var(--reader-font, var(--font-body));
+  font-size: var(--reader-size, 18px);
+  line-height: var(--reader-lh, 1.7);
+  color: var(--reader-text, var(--color-text-primary));
+  padding: 0 var(--space-4);
+}
+
+/* Типографика контента */
+.content p {
+  margin-bottom: 1.5em;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.content p:first-child::first-letter {
+  font-family: var(--font-display);
+  font-size: 4.5em;
+  font-weight: 900;
+  float: left;
+  line-height: 0.8;
+  margin: 0.05em 0.1em 0 0;
+  color: var(--color-accent);
+}
+
+.content h2 {
+  font-family: var(--font-display);
+  font-size: 1.5em;
+  font-weight: 300;
+  font-style: italic;
+  text-align: center;
+  margin: 2em 0 1em;
+  color: var(--color-text-muted);
+}
+
+.content blockquote {
+  border-left: 2px solid var(--color-accent-dim);
+  padding: var(--space-4) var(--space-6);
+  margin: 2em 0;
+  font-style: italic;
+  color: var(--color-text-secondary);
+  background: var(--reader-surface, var(--color-bg-raised));
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+/* Разделитель сцен */
+.content hr {
+  border: none;
+  text-align: center;
+  margin: 2.5em auto;
+  color: var(--color-text-muted);
+  font-family: var(--font-japanese);
+  font-size: var(--text-xl);
+  letter-spacing: 0.5em;
+}
+.content hr::after {
+  content: "✦";
+}
+
+/* ── Навигация глав ── */
+.chapterNav {
+  width: 100%;
+  max-width: calc(var(--reader-width, 680px) + 200px);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-8) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-16);
+}
+
+.navBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  transition: all var(--dur-base) var(--ease-out);
+  text-decoration: none;
+  max-width: 280px;
+}
+
+.navBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+  background: var(--color-accent-faint);
+}
+
+.navBtnRight {
+  justify-content: flex-end;
+  text-align: right;
+  margin-left: auto;
+}
+
+.navBtnText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.navBtnLabel {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.navBtnChapter {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.navBtnCenter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all var(--dur-fast);
+}
+.navBtnCenter:hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
+/* Конец произведения */
+.endMessage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.endKanji {
+  font-family: var(--font-japanese);
+  font-size: var(--text-2xl);
+  color: var(--color-accent);
+  opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+  .chapterNav {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+  .navBtnCenter {
+    grid-column: span 2;
+    order: 3;
+  }
+  .content {
+    padding: 0;
+  }
+}

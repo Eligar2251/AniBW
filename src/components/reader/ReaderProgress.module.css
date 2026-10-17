@@ -1,0 +1,37 @@
+/* src/components/reader/ReaderProgress.module.css */
+
+.track {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-border-subtle);
+  z-index: calc(var(--z-overlay) + 1);
+  overflow: visible;
+}
+
+.fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-dim),
+    var(--color-accent)
+  );
+  transform-origin: left;
+  will-change: width;
+}
+
+.glow {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background: var(--color-accent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 10px var(--color-accent),
+    0 0 20px var(--color-accent-glow);
+  transition: left 0.1s;
+}

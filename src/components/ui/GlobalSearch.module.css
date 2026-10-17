@@ -1,0 +1,298 @@
+/* src/components/ui/GlobalSearch.module.css */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 18, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  padding-top: 80px;
+  align-items: flex-start;
+}
+
+.panel {
+  width: 100%;
+  max-width: 640px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-xl);
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Строка ввода */
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.searchIcon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 300;
+  color: var(--color-text-primary);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+
+.clearBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  flex-shrink: 0;
+}
+.clearBtn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.divider {
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* Тело */
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3);
+}
+
+/* Подсказки */
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.suggestLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 var(--space-2);
+}
+
+.tagCloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+}
+
+.tagChip {
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition: all var(--dur-fast);
+}
+
+.tagChip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Загрузка */
+.loadingRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeletonResult {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+}
+
+.skeletonCover {
+  width: 40px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.skeletonMeta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+/* Нет результатов */
+.noResults {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) 0;
+}
+
+.noResultsKanji {
+  font-family: var(--font-japanese);
+  font-size: var(--text-3xl);
+  color: var(--color-text-faint);
+}
+
+.noResults p {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* Результаты */
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resultItem {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: background var(--dur-fast);
+}
+
+.resultItem:hover {
+  background: var(--color-surface);
+}
+
+.resultCover {
+  width: 44px;
+  height: 60px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.resultCoverImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.resultCoverPlaceholder {
+  font-family: var(--font-japanese);
+  font-size: var(--text-xl);
+  color: var(--color-text-faint);
+}
+
+.resultMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.resultFandom {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resultTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--dur-fast);
+}
+
+.resultItem:hover .resultTitle {
+  color: var(--color-accent);
+}
+
+.resultAuthor {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.resultRating {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.allResultsLink {
+  display: block;
+  text-align: center;
+  padding: var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  text-decoration: none;
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--space-2);
+  transition: opacity var(--dur-fast);
+}
+
+.allResultsLink:hover {
+  opacity: 0.7;
+}
+
+@media (max-width: 680px) {
+  .backdrop {
+    padding: 0;
+    align-items: flex-start;
+  }
+  .panel {
+    max-height: 100vh;
+    border-radius: 0;
+  }
+}
