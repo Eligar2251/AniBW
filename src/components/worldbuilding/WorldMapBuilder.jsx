@@ -89,7 +89,9 @@ function MapBuilderEditor({ workId, settings }) {
   const revisionRef = useRef(0);
   const [mapState, setMapState] = useState(() => normalizeMapState(settings?.map_state));
   const [selectedTextureId, setSelectedTextureId] = useState("grass");
-  const [tool, setTool] = useState("paint");
+  const [tool, setTool] = useState("brush");
+  const [brushSize, setBrushSize] = useState(0.055);
+  const [brushOpacity, setBrushOpacity] = useState(1);
   const [cityType, setCityType] = useState("city");
   const [viewMode, setViewMode] = useState("2d");
   const [zoom, setZoom] = useState(0.85);
@@ -98,7 +100,7 @@ function MapBuilderEditor({ workId, settings }) {
   const [uploading, setUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [hasSavedMap, setHasSavedMap] = useState(
-    Array.isArray(settings?.map_state?.tiles) && settings.map_state.tiles.length > 0,
+    Array.isArray(settings?.map_state?.strokes) || Array.isArray(settings?.map_state?.tiles),
   );
   const [isPublished, setIsPublished] = useState(Boolean(settings?.is_published));
   const [actionError, setActionError] = useState("");
@@ -172,85 +174,36 @@ function MapBuilderEditor({ workId, settings }) {
     setActionError("");
   };
 
-  const paintCell = (x, y) => {
-    if (tool === "city") {
-      const cityName = window.prompt(
-        cityType === "village" ? "Название поселения" : "Название города",
-        cityType === "village" ? "Новая деревня" : "Новый город",
-      );
-      if (!cityName?.trim()) return;
-      updateMap((current) => {
-        const tiles = [...current.tiles];
-        tiles[y * current.width + x] = cityType === "village" ? "village" : "city";
-        const cities = current.cities.filter((city) => city.x !== x || city.y !== y);
-        cities.push({ id: createId("city"), name: cityName.trim().slice(0, 80), x, y, type: cityType });
-        return { ...current, tiles, cities };
-      });
-      setTool("paint");
-      return;
-    }
-
-    const nextId = tool === "erase" ? "grass" : selectedTextureId;
-    const index = y * mapState.width + x;
-    if (mapState.tiles[index] === nextId) return;
-    updateMap((current) => {
-      const tiles = [...current.tiles];
-      tiles[index] = nextId;
-      const cities = nextId === "grass"
-        ? current.cities.filter((city) => city.x !== x || city.y !== y)
-        : current.cities;
-      return { ...current, tiles, cities };
-    });
+  const addStroke = (stroke) => {
+    if (!stroke?.points?.length) return;
+    updateMap((current) => ({
+      ...current,
+      strokes: [...current.strokes, stroke].slice(-2000),
+    }));
   };
 
-  const fillRegion = (x, y) => {
-    const startIndex = y * mapState.width + x;
-    const fromId = mapState.tiles[startIndex];
-    const toId = selectedTextureId;
-    if (fromId === toId) return;
-
-    updateMap((current) => {
-      const tiles = [...current.tiles];
-      const queue = [startIndex];
-      const visited = new Uint8Array(tiles.length);
-      while (queue.length) {
-        const index = queue.pop();
-        if (index < 0 || index >= tiles.length || visited[index] || tiles[index] !== fromId) continue;
-        visited[index] = 1;
-        tiles[index] = toId;
-        const cellX = index % current.width;
-        const cellY = Math.floor(index / current.width);
-        if (cellX > 0) queue.push(index - 1);
-        if (cellX < current.width - 1) queue.push(index + 1);
-        if (cellY > 0) queue.push(index - current.width);
-        if (cellY < current.height - 1) queue.push(index + current.width);
-      }
-      return { ...current, tiles };
-    });
+  const addCity = (x, y) => {
+    const cityName = window.prompt(
+      cityType === "village" ? "Название поселения" : "Название города",
+      cityType === "village" ? "Новая деревня" : "Новый город",
+    );
+    if (!cityName?.trim()) return;
+    updateMap((current) => ({
+      ...current,
+      cities: [
+        ...current.cities,
+        { id: createId("city"), name: cityName.trim().slice(0, 80), x, y, type: cityType },
+      ],
+    }));
   };
 
-  const handleCellClick = (x, y) => {
-    if (tool === "fill") fillRegion(x, y);
-    else paintCell(x, y);
-  };
-
-  const handleCellDrag = (x, y) => {
-    if (tool === "paint" || tool === "erase") paintCell(x, y);
+  const setBaseTexture = (textureId) => {
+    if (mapState.baseTextureId === textureId) return;
+    updateMap((current) => ({ ...current, baseTextureId: textureId }));
   };
 
   const resizeMap = (width, height) => {
-    updateMap((current) => {
-      const tiles = Array(width * height).fill("grass");
-      const copyWidth = Math.min(width, current.width);
-      const copyHeight = Math.min(height, current.height);
-      for (let y = 0; y < copyHeight; y += 1) {
-        for (let x = 0; x < copyWidth; x += 1) {
-          tiles[y * width + x] = current.tiles[y * current.width + x];
-        }
-      }
-      const cities = current.cities.filter((city) => city.x < width && city.y < height);
-      return { ...current, width, height, tiles, cities };
-    });
+    updateMap((current) => ({ ...current, width, height }));
   };
 
   const importSpriteSheet = async (event) => {
@@ -354,7 +307,7 @@ function MapBuilderEditor({ workId, settings }) {
           <span className={styles.headingIcon}><Mountain size={17} /></span>
           <div>
             <h2>Мастерская карт</h2>
-            <p>Рисуйте мир по клеткам, добавляйте города и осматривайте рельеф в 3D.</p>
+            <p>Рисуйте мир свободными кистями, размещайте города и вращайте рельеф в 3D.</p>
           </div>
         </div>
         <div className={styles.headerActions}>
@@ -380,12 +333,12 @@ function MapBuilderEditor({ workId, settings }) {
       </header>
 
       <div className={styles.toolbar}>
-        <div className={styles.toolGroup} role="group" aria-label="Инструменты рисования">
-          <button type="button" className={`${styles.toolButton} ${tool === "paint" ? styles.active : ""}`} onClick={() => setTool("paint")}>
+        <div className={styles.toolGroup} role="group" aria-label="Инструменты свободного рисования">
+          <button type="button" className={`${styles.toolButton} ${tool === "brush" ? styles.active : ""}`} onClick={() => setTool("brush")}>
             <Brush size={14} /> Кисть
           </button>
           <button type="button" className={`${styles.toolButton} ${tool === "fill" ? styles.active : ""}`} onClick={() => setTool("fill")}>
-            <PaintBucket size={14} /> Заливка
+            <PaintBucket size={14} /> Основа
           </button>
           <button type="button" className={`${styles.toolButton} ${tool === "erase" ? styles.active : ""}`} onClick={() => setTool("erase")}>
             <Eraser size={14} /> Ластик
@@ -394,6 +347,37 @@ function MapBuilderEditor({ workId, settings }) {
             <MapPinned size={14} /> Город
           </button>
         </div>
+
+        {(tool === "brush" || tool === "erase") && (
+          <div className={styles.brushControls}>
+            <label className={styles.brushControl}>
+              <span>Кисть <b>{Math.round(brushSize * mapState.height)} px</b></span>
+              <input
+                type="range"
+                min="0.005"
+                max="0.22"
+                step="0.005"
+                value={brushSize}
+                onChange={(event) => setBrushSize(Number(event.target.value))}
+                aria-label="Размер кисти"
+              />
+            </label>
+            {tool === "brush" && (
+              <label className={styles.brushControl}>
+                <span>Непрозрачность <b>{Math.round(brushOpacity * 100)}%</b></span>
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  step="5"
+                  value={Math.round(brushOpacity * 100)}
+                  onChange={(event) => setBrushOpacity(Number(event.target.value) / 100)}
+                  aria-label="Непрозрачность кисти"
+                />
+              </label>
+            )}
+          </div>
+        )}
 
         {tool === "city" && (
           <label className={styles.selectWrap}>
@@ -407,7 +391,7 @@ function MapBuilderEditor({ workId, settings }) {
         )}
 
         <label className={styles.selectWrap}>
-          Размер
+          Холст
           <select value={currentPreset} onChange={selectSize}>
             {MAP_SIZE_PRESETS.map((preset) => (
               <option key={`${preset.width}x${preset.height}`} value={`${preset.width}x${preset.height}`}>
@@ -455,12 +439,15 @@ function MapBuilderEditor({ workId, settings }) {
             {viewMode === "2d" ? (
               <WorldMapCanvas2D
                 mapState={mapState}
-                cellSize={36}
                 zoom={zoom}
-                showGrid
                 editable
-                onCellClick={handleCellClick}
-                onCellDrag={handleCellDrag}
+                activeTool={tool}
+                selectedTextureId={selectedTextureId}
+                brushSize={brushSize}
+                brushOpacity={brushOpacity}
+                onStrokeComplete={addStroke}
+                onPlaceCity={addCity}
+                onSetBaseTexture={setBaseTexture}
               />
             ) : (
               <Suspense fallback={<div className={styles.status}>Загружаем 3D-сцену…</div>}>
@@ -469,9 +456,9 @@ function MapBuilderEditor({ workId, settings }) {
             )}
           </div>
           <div className={styles.mapFooter}>
-            <span>{mapState.width} × {mapState.height} клеток</span>
-            <span>{mapState.cities.length} {mapState.cities.length === 1 ? "город" : "городов и поселений"}</span>
-            <span><CircleHelp size={13} /> В 3D: тяните мышью, чтобы вращать карту</span>
+            <span>{mapState.width} × {mapState.height} px</span>
+            <span>{mapState.strokes.length} мазков · {mapState.cities.length} городов и поселений</span>
+            <span><CircleHelp size={13} /> Рисуйте, удерживая кнопку мыши; в 3D тяните для вращения</span>
           </div>
         </main>
 
@@ -479,7 +466,7 @@ function MapBuilderEditor({ workId, settings }) {
           <div className={styles.paletteHeading}>
             <div>
               <h3>Текстуры</h3>
-              <span>{textures.length} тайлов · выбрана: {selectedTexture?.label}</span>
+              <span>{textures.length} текстур · выбрана: {selectedTexture?.label}</span>
             </div>
           </div>
           <div className={styles.textureGrid}>
@@ -488,10 +475,7 @@ function MapBuilderEditor({ workId, settings }) {
                 key={texture.id}
                 type="button"
                 className={`${styles.textureButton} ${selectedTextureId === texture.id ? styles.textureSelected : ""}`}
-                onClick={() => {
-                  setSelectedTextureId(texture.id);
-                  if (tool === "city" || tool === "fill") setTool("paint");
-                }}
+                onClick={() => setSelectedTextureId(texture.id)}
                 title={texture.label}
                 aria-pressed={selectedTextureId === texture.id}
               >
@@ -563,13 +547,13 @@ function MapBuilderEditor({ workId, settings }) {
                   <li key={city.id}>
                     <span className={styles.cityDot}>{city.type === "village" ? "Д" : "Г"}</span>
                     <span className={styles.cityName}>{city.name}</span>
-                    <small>{city.x + 1}, {city.y + 1}</small>
+                    <small>{Math.round(city.x * 100)}%, {Math.round(city.y * 100)}%</small>
                     <button type="button" onClick={() => deleteCity(city.id)} aria-label={`Удалить ${city.name}`}>×</button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p>Выберите инструмент «Город» и щёлкните по карте.</p>
+              <p>Выберите инструмент «Город» и щёлкните по карте, чтобы поставить метку.</p>
             )}
           </div>
         </aside>

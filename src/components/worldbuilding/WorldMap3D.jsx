@@ -1,42 +1,19 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { getMapTexture } from "./mapTextures";
+import { getAllMapTextures } from "./mapTextures";
+import { renderHeightMap, renderMapCanvas } from "./mapRenderer";
 
-function loadTexture(loader, src) {
+const NO_MARKERS = [];
+
+function loadImage(src) {
   return new Promise((resolve) => {
-    loader.load(
-      src,
-      (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.anisotropy = 4;
-        resolve(texture);
-      },
-      undefined,
-      () => resolve(null),
-    );
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve([src, image]);
+    image.onerror = () => resolve([src, null]);
+    image.src = src;
   });
-}
-
-function makeTileTexture(atlas, descriptor) {
-  if (!atlas) return null;
-  const texture = atlas.clone();
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-
-  if (descriptor.sourceType === "sheet") {
-    const cols = Math.max(1, Number(descriptor.cols) || 1);
-    const rows = Math.max(1, Number(descriptor.rows) || 1);
-    const col = Math.min(cols - 1, Math.max(0, Number(descriptor.col) || 0));
-    const row = Math.min(rows - 1, Math.max(0, Number(descriptor.row) || 0));
-    texture.repeat.set(1 / cols, 1 / rows);
-    texture.offset.set(col / cols, 1 - (row + 1) / rows);
-  }
-  texture.needsUpdate = true;
-  return texture;
 }
 
 function makeLabelSprite(text, color = "#f7e7c5") {
@@ -44,8 +21,8 @@ function makeLabelSprite(text, color = "#f7e7c5") {
   canvas.width = 512;
   canvas.height = 128;
   const context = canvas.getContext("2d");
-  context.fillStyle = "rgba(9, 12, 15, 0.84)";
-  context.strokeStyle = "rgba(220, 174, 88, 0.8)";
+  context.fillStyle = "rgba(9, 12, 15, 0.88)";
+  context.strokeStyle = "rgba(220, 174, 88, 0.85)";
   context.lineWidth = 5;
   context.beginPath();
   context.roundRect(4, 4, 504, 120, 20);
@@ -55,25 +32,15 @@ function makeLabelSprite(text, color = "#f7e7c5") {
   context.font = "600 44px system-ui, sans-serif";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(text.slice(0, 32), 256, 64, 470);
+  context.fillText(String(text || "").slice(0, 32), 256, 64, 470);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }),
   );
-  sprite.scale.set(Math.max(1.2, Math.min(4, text.length * 0.12 + 0.8)), 0.42, 1);
+  sprite.scale.set(Math.max(1.2, Math.min(4, String(text || "").length * 0.12 + 0.8)), 0.42, 1);
   return sprite;
-}
-
-function makeTextureMaterial(atlas, descriptor) {
-  const texture = makeTileTexture(atlas, descriptor);
-  return new THREE.MeshStandardMaterial({
-    map: texture || null,
-    color: texture ? "#ffffff" : "#62734f",
-    roughness: 1,
-    metalness: 0,
-  });
 }
 
 function addMapPin(scene, x, z, y, color, label, markerId) {
@@ -96,13 +63,81 @@ function addMapPin(scene, x, z, y, color, label, markerId) {
     group.add(sprite);
   }
   scene.add(group);
-  return group;
 }
 
-const NO_MARKERS = [];
+function createHeightCanvas(mapState) {
+  const canvas = document.createElement("canvas");
+  const aspect = mapState.height / mapState.width;
+  canvas.width = 512;
+  canvas.height = Math.max(1, Math.round(canvas.width * aspect));
+  renderHeightMap(canvas.getContext("2d"), mapState);
+  return canvas;
+}
+
+function createTerrainGeometry(heightCanvas, mapWidth, mapDepth) {
+  const context = heightCanvas.getContext("2d", { willReadFrequently: true });
+  const pixels = context.getImageData(0, 0, heightCanvas.width, heightCanvas.height).data;
+  const segmentsX = 180;
+  const segmentsZ = Math.max(64, Math.round(segmentsX * mapDepth / mapWidth));
+  const vertexCount = (segmentsX + 1) * (segmentsZ + 1);
+  const positions = new Float32Array(vertexCount * 3);
+  const uvs = new Float32Array(vertexCount * 2);
+  const indices = new Uint32Array(segmentsX * segmentsZ * 6);
+  const elevationAt = (u, v) => {
+    const x = Math.min(heightCanvas.width - 1, Math.max(0, Math.round(u * (heightCanvas.width - 1))));
+    const y = Math.min(heightCanvas.height - 1, Math.max(0, Math.round(v * (heightCanvas.height - 1))));
+    const gray = pixels[(y * heightCanvas.width + x) * 4] / 255;
+    return Math.max(-0.18, (gray * 1.2 - 0.25 + 0.22) * 2.8);
+  };
+
+  let vertex = 0;
+  for (let row = 0; row <= segmentsZ; row += 1) {
+    const v = row / segmentsZ;
+    for (let column = 0; column <= segmentsX; column += 1) {
+      const u = column / segmentsX;
+      const offset = vertex * 3;
+      positions[offset] = (u - 0.5) * mapWidth;
+      positions[offset + 1] = elevationAt(u, v);
+      positions[offset + 2] = (v - 0.5) * mapDepth;
+      uvs[vertex * 2] = u;
+      uvs[vertex * 2 + 1] = 1 - v;
+      vertex += 1;
+    }
+  }
+
+  let indexOffset = 0;
+  for (let row = 0; row < segmentsZ; row += 1) {
+    for (let column = 0; column < segmentsX; column += 1) {
+      const topLeft = row * (segmentsX + 1) + column;
+      const topRight = topLeft + 1;
+      const bottomLeft = topLeft + segmentsX + 1;
+      const bottomRight = bottomLeft + 1;
+      indices[indexOffset++] = topLeft;
+      indices[indexOffset++] = bottomLeft;
+      indices[indexOffset++] = topRight;
+      indices[indexOffset++] = topRight;
+      indices[indexOffset++] = bottomLeft;
+      indices[indexOffset++] = bottomRight;
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.computeVertexNormals();
+  return { geometry, elevationAt };
+}
+
+async function loadMapImages(mapState) {
+  const textures = getAllMapTextures(mapState.textures || []);
+  const sources = [...new Set(textures.map((texture) => texture.src).filter(Boolean))];
+  return Object.fromEntries(await Promise.all(sources.map(loadImage)));
+}
 
 export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMarker }) {
   const mountRef = useRef(null);
+  const loadingRef = useRef(null);
   const selectMarkerRef = useRef(onSelectMarker);
 
   useEffect(() => {
@@ -117,9 +152,9 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
     let frameId = 0;
     let renderer;
     let controls;
-    const texturesToDispose = [];
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin("anonymous");
+    let terrainGeometry = null;
+    let terrainGeometryAttached = false;
+    if (loadingRef.current) loadingRef.current.hidden = false;
 
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -128,6 +163,7 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
       message.className = "world-map-webgl-fallback";
       message.textContent = "3D-режим недоступен в этом браузере. Откройте карту в 2D.";
       mount.replaceChildren(message);
+      if (loadingRef.current) loadingRef.current.hidden = true;
       return () => mount.replaceChildren();
     }
 
@@ -140,110 +176,102 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b1012);
-    scene.fog = new THREE.Fog(0x0b1012, Math.max(mapState.width, mapState.height) * 2, Math.max(mapState.width, mapState.height) * 5);
+    scene.fog = new THREE.Fog(0x0b1012, 72, 190);
     scene.add(new THREE.HemisphereLight(0xe5f0ff, 0x463d2d, 2.1));
     const sun = new THREE.DirectionalLight(0xffe0a6, 2.2);
-    sun.position.set(-mapState.width * 0.4, mapState.height, mapState.height * 0.6);
+    sun.position.set(-24, 38, 30);
     scene.add(sun);
 
-    const aspect = Math.max(1, mount.clientWidth) / Math.max(1, mount.clientHeight);
-    const camera = new THREE.PerspectiveCamera(42, aspect, 0.1, 1000);
-    const mapExtent = Math.max(mapState.width, mapState.height);
-    camera.position.set(mapState.width * 0.85, mapExtent * 1.05, mapState.height * 1.1);
-    camera.lookAt(0, 0, 0);
+    const mapWidth = 36;
+    const mapDepth = mapWidth * mapState.height / mapState.width;
+    const mapExtent = Math.max(mapWidth, mapDepth);
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
+    camera.position.set(mapWidth * 0.8, mapExtent * 1.1, mapDepth * 1.1);
+    camera.lookAt(0, 0.6, 0);
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.075;
-    controls.target.set(0, 0.1, 0);
-    controls.minDistance = Math.max(5, mapExtent * 0.35);
-    controls.maxDistance = mapExtent * 3.2;
+    controls.target.set(0, 0.6, 0);
+    controls.minDistance = mapExtent * 0.55;
+    controls.maxDistance = mapExtent * 4.5;
     controls.maxPolarAngle = Math.PI * 0.48;
     controls.update();
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(mapState.width + 1, mapState.height + 1),
+      new THREE.PlaneGeometry(mapWidth + 3, mapDepth + 3),
       new THREE.MeshStandardMaterial({ color: 0x18221d, roughness: 1 }),
     );
     floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -0.09;
+    floor.position.y = -0.28;
     scene.add(floor);
 
-    const usedTextureIds = [...new Set(mapState.tiles)];
-    const descriptors = [
-      ...new Map(
-        usedTextureIds.map((id) => {
-          const descriptor = getMapTexture(id, mapState.textures || []);
-          return [descriptor.id, descriptor];
-        }),
-      ).values(),
-    ];
-    const sources = [...new Set(descriptors.map((descriptor) => descriptor.src).filter(Boolean))];
-    const textureLoad = Promise.all(sources.map(async (src) => [src, await loadTexture(loader, src)]));
+    const heightCanvas = createHeightCanvas(mapState);
+    const terrainModel = createTerrainGeometry(heightCanvas, mapWidth, mapDepth);
+    terrainGeometry = terrainModel.geometry;
+    const { elevationAt } = terrainModel;
 
-    textureLoad.then((loadedSources) => {
+    loadMapImages(mapState).then((images) => {
       if (disposed) {
-        loadedSources.forEach(([, texture]) => texture?.dispose());
+        terrainGeometry?.dispose();
+        terrainGeometry = null;
         return;
       }
-      const atlases = new Map(loadedSources);
-      loadedSources.forEach(([, texture]) => texture && texturesToDispose.push(texture));
-      const sideMaterial = new THREE.MeshStandardMaterial({ color: 0x3b4138, roughness: 1 });
+      const colorCanvas = document.createElement("canvas");
+      colorCanvas.width = mapState.width;
+      colorCanvas.height = mapState.height;
+      const colorContext = colorCanvas.getContext("2d");
+      renderMapCanvas(colorContext, mapState, images, false);
+      const colorTexture = new THREE.CanvasTexture(colorCanvas);
+      colorTexture.colorSpace = THREE.SRGBColorSpace;
+      colorTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      colorTexture.wrapS = THREE.ClampToEdgeWrapping;
+      colorTexture.wrapT = THREE.ClampToEdgeWrapping;
+      colorTexture.minFilter = THREE.LinearMipmapLinearFilter;
+      colorTexture.magFilter = THREE.LinearFilter;
 
-      descriptors.forEach((descriptor) => {
-        const indices = [];
-        mapState.tiles.forEach((id, index) => {
-          if (getMapTexture(id, mapState.textures || []).id === descriptor.id) {
-            indices.push(index);
-          }
-        });
-        if (indices.length === 0) return;
+      const terrain = new THREE.Mesh(
+        terrainGeometry,
+        new THREE.MeshStandardMaterial({ map: colorTexture, roughness: 1, metalness: 0 }),
+      );
+      terrain.receiveShadow = false;
+      terrain.frustumCulled = false;
+      scene.add(terrain);
+      terrainGeometryAttached = true;
 
-        const elevation = Math.max(0.08, Math.min(1.6, Number(descriptor.elevation) || 0.18));
-        const atlas = atlases.get(descriptor.src);
-        const topMaterial = makeTextureMaterial(atlas, descriptor);
-        const tileGeometry = new THREE.BoxGeometry(0.985, 1, 0.985);
-        const mesh = new THREE.InstancedMesh(
-          tileGeometry,
-          [sideMaterial, sideMaterial, topMaterial, sideMaterial, sideMaterial, sideMaterial],
-          indices.length,
-        );
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-        mesh.frustumCulled = false;
-
-        const matrix = new THREE.Matrix4();
-        indices.forEach((index, instanceIndex) => {
-          const x = index % mapState.width;
-          const z = Math.floor(index / mapState.width);
-          const position = new THREE.Vector3(
-            x - (mapState.width - 1) / 2,
-            elevation / 2,
-            z - (mapState.height - 1) / 2,
-          );
-          matrix.compose(position, new THREE.Quaternion(), new THREE.Vector3(1, elevation, 1));
-          mesh.setMatrixAt(instanceIndex, matrix);
-        });
-        mesh.instanceMatrix.needsUpdate = true;
-        scene.add(mesh);
-      });
-
+      const pointHeight = (x, y) => elevationAt(x, y);
       mapState.cities.forEach((city) => {
-        const texture = getMapTexture(mapState.tiles[city.y * mapState.width + city.x], mapState.textures || []);
-        const x = city.x - (mapState.width - 1) / 2;
-        const z = city.y - (mapState.height - 1) / 2;
-        const y = Number(texture.elevation) || 0.18;
-        addMapPin(scene, x, z, y, "#dcae58", city.name, null);
+        addMapPin(
+          scene,
+          (city.x - 0.5) * mapWidth,
+          (city.y - 0.5) * mapDepth,
+          pointHeight(city.x, city.y),
+          "#dcae58",
+          city.name,
+          null,
+        );
       });
 
       markers.forEach((marker) => {
-        const x = (Number(marker.pos_x) / 100) * (mapState.width - 1) - (mapState.width - 1) / 2;
-        const z = (Number(marker.pos_y) / 100) * (mapState.height - 1) - (mapState.height - 1) / 2;
-        const tileX = Math.max(0, Math.min(mapState.width - 1, Math.round(Number(marker.pos_x) / 100 * (mapState.width - 1))));
-        const tileY = Math.max(0, Math.min(mapState.height - 1, Math.round(Number(marker.pos_y) / 100 * (mapState.height - 1))));
-        const terrain = getMapTexture(mapState.tiles[tileY * mapState.width + tileX], mapState.textures || []);
-        addMapPin(scene, x, z, Number(terrain.elevation) || 0.18, marker.color || "#e8354a", marker.label, marker.id);
+        const x = Math.min(1, Math.max(0, Number(marker.pos_x) / 100));
+        const y = Math.min(1, Math.max(0, Number(marker.pos_y) / 100));
+        addMapPin(
+          scene,
+          (x - 0.5) * mapWidth,
+          (y - 0.5) * mapDepth,
+          pointHeight(x, y),
+          marker.color || "#e8354a",
+          marker.label,
+          marker.id,
+        );
       });
+      if (loadingRef.current) loadingRef.current.hidden = true;
+    }).catch(() => {
+      if (!terrainGeometryAttached) {
+        terrainGeometry?.dispose();
+        terrainGeometry = null;
+      }
+      if (!disposed && loadingRef.current) loadingRef.current.hidden = true;
     });
 
     const pointerDown = { x: 0, y: 0 };
@@ -256,6 +284,7 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
     const handlePointerUp = (event) => {
       if (Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
       const rect = renderer.domElement.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
@@ -311,7 +340,10 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
         if (Array.isArray(object.material)) object.material.forEach(releaseMaterial);
         else if (object.material) releaseMaterial(object.material);
       });
-      texturesToDispose.forEach((resource) => resource?.dispose?.());
+      if (!terrainGeometryAttached) {
+        terrainGeometry?.dispose();
+        terrainGeometry = null;
+      }
       renderer.dispose();
       mount.replaceChildren();
     };
@@ -320,6 +352,7 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
   return (
     <div className="world-map-3d-canvas">
       <div className="world-map-3d-stage" ref={mountRef} />
+      <span ref={loadingRef} className="world-map-3d-loading">Формируем рельеф…</span>
       <span className="world-map-3d-hint">Зажмите и тяните, чтобы повернуть · колесо мыши — масштаб · правая кнопка — перемещение</span>
     </div>
   );

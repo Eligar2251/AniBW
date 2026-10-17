@@ -157,6 +157,46 @@
   flex-wrap: wrap;
 }
 
+.brushControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 5px;
+}
+
+.brushControl {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 112px;
+  color: var(--color-text-faint);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.brushControl span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.brushControl b {
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.brushControl input {
+  width: 100%;
+  height: 13px;
+  margin: 0;
+  accent-color: #d5ae69;
+  cursor: pointer;
+}
+
 .toolButton {
   min-height: 31px;
   padding: 0 10px;
@@ -326,14 +366,11 @@
   overscroll-behavior: contain;
 }
 
-.mapViewport[data-tool="paint"],
+.mapViewport[data-tool="brush"],
 .mapViewport[data-tool="fill"],
+.mapViewport[data-tool="erase"],
 .mapViewport[data-tool="city"] {
   cursor: crosshair;
-}
-
-.mapViewport[data-tool="erase"] {
-  cursor: cell;
 }
 
 .mapViewport :global(.world-map-canvas) {
@@ -388,6 +425,21 @@
   font-family: var(--font-ui);
   font-size: 10px;
   pointer-events: none;
+}
+
+.mapViewport :global(.world-map-3d-loading) {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.mapViewport :global(.world-map-3d-loading[hidden]) {
+  display: none;
 }
 
 .mapViewport :global(.world-map-webgl-fallback) {

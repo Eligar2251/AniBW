@@ -257,6 +257,21 @@
   pointer-events: none;
 }
 
+.terrain3d :global(.world-map-3d-loading) {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.terrain3d :global(.world-map-3d-loading[hidden]) {
+  display: none;
+}
+
 .error {
   display: flex;
   align-items: center;

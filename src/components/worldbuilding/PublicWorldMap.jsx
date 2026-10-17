@@ -56,7 +56,7 @@ export default function PublicWorldMap({
     enabled: !!workId,
   });
 
-  const hasTerrainMap = Array.isArray(mapState?.tiles) && mapState.tiles.length > 0;
+  const hasTerrainMap = Array.isArray(mapState?.strokes) || Array.isArray(mapState?.tiles);
   const normalizedMapState = useMemo(
     () => hasTerrainMap ? normalizeMapState(mapState) : null,
     [hasTerrainMap, mapState],
@@ -138,15 +138,11 @@ export default function PublicWorldMap({
             <div
               className={styles.terrainPlane}
               style={{
-                width: `${normalizedMapState.width * 32}px`,
-                height: `${normalizedMapState.height * 32}px`,
+                width: `${normalizedMapState.width}px`,
+                height: `${normalizedMapState.height}px`,
               }}
             >
-              <WorldMapCanvas2D
-                mapState={normalizedMapState}
-                cellSize={32}
-                showGrid={false}
-              />
+              <WorldMapCanvas2D mapState={normalizedMapState} />
               {markers.map((marker) => (
                 <button
                   key={marker.id}
