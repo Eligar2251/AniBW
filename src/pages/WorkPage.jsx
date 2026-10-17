@@ -16,6 +16,7 @@ import {
   Hash,
   Users,
   Star,
+  Map,
 } from "lucide-react";
 import { supabase } from "@lib/supabase";
 import { getCloudinaryUrl, transforms } from "@lib/cloudinary";
@@ -67,6 +68,42 @@ function useSimilarWorks(workId, fandomId) {
   });
 }
 
+function usePublicWorldAvailability(workId) {
+  return useQuery({
+    queryKey: ["public-world-availability", workId],
+    queryFn: async () => {
+      const [entriesResult, markersResult, mapResult] = await Promise.all([
+        supabase
+          .from("world_entries")
+          .select("id", { count: "exact", head: true })
+          .eq("work_id", workId)
+          .eq("is_published", true),
+        supabase
+          .from("map_markers")
+          .select("id", { count: "exact", head: true })
+          .eq("work_id", workId)
+          .eq("is_published", true),
+        supabase
+          .from("world_map_settings")
+          .select("work_id", { count: "exact", head: true })
+          .eq("work_id", workId)
+          .eq("is_published", true)
+          .not("background_url", "is", null),
+      ]);
+      if (entriesResult.error) throw entriesResult.error;
+      if (markersResult.error) throw markersResult.error;
+      if (mapResult.error) throw mapResult.error;
+      return (
+        (entriesResult.count || 0) > 0 ||
+        (markersResult.count || 0) > 0 ||
+        (mapResult.count || 0) > 0
+      );
+    },
+    enabled: !!workId,
+    retry: 1,
+  });
+}
+
 const RATING_INFO = {
   G: { color: "#2ECC71", desc: "Подходит для всех возрастов" },
   PG: { color: "#5B9BD5", desc: "Рекомендуется родительский контроль" },
@@ -80,6 +117,7 @@ export default function WorkPage() {
   const location = useLocation();
   const { data: work, isLoading } = useWork(id);
   const { data: similar = [] } = useSimilarWorks(id, work?.fandom_id);
+  const { data: hasPublishedWorld = false } = usePublicWorldAvailability(id);
   const { isLiked, toggleLike } = useWorkLike(id);
   const { isBookmarked, toggleBookmark } = useWorkBookmark(id);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -289,6 +327,16 @@ export default function WorkPage() {
                 <BookOpen size={16} strokeWidth={1.5} />
                 Читать с начала
               </Link>
+              {hasPublishedWorld && (
+                <Link
+                  to={`/works/${work.id}/world`}
+                  className={styles.worldBtn}
+                  title="Открыть энциклопедию и атлас мира"
+                >
+                  <Map size={16} strokeWidth={1.5} />
+                  Мир
+                </Link>
+              )}
               <button
                 className={styles.bookmarkBtn}
                 onClick={handleBookmark}

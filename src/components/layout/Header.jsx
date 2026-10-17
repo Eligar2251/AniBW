@@ -43,9 +43,12 @@ function useUnreadCount() {
 export default function Header() {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [userDropOpen, setUserDropOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
+  const [menuOpenPath, setMenuOpenPath] = useState(null);
+  const [userDropPath, setUserDropPath] = useState(null);
+  const [notifPath, setNotifPath] = useState(null);
+  const menuOpen = menuOpenPath === location.pathname;
+  const userDropOpen = userDropPath === location.pathname;
+  const notifOpen = notifPath === location.pathname;
   const dropRef = useRef(null);
   const notifRef = useRef(null);
 
@@ -69,21 +72,15 @@ export default function Header() {
   useEffect(() => {
     const handler = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) {
-        setUserDropOpen(false);
+        setUserDropPath(null);
       }
       if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setNotifOpen(false);
+        setNotifPath(null);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-
-  useEffect(() => {
-    setMenuOpen(false);
-    setUserDropOpen(false);
-    setNotifOpen(false);
-  }, [location.pathname]);
 
   const navLinks = [
     { to: "/works", label: "Читать" },
@@ -140,7 +137,7 @@ export default function Header() {
               <div className={styles.notifWrap} ref={notifRef}>
                 <button
                   className={styles.iconBtn}
-                  onClick={() => setNotifOpen((v) => !v)}
+                  onClick={() => setNotifPath(notifOpen ? null : location.pathname)}
                   aria-label="Уведомления"
                 >
                   <Bell size={18} strokeWidth={1.5} />
@@ -151,7 +148,7 @@ export default function Header() {
 
                 <AnimatePresence>
                   {notifOpen && (
-                    <NotificationsPanel onClose={() => setNotifOpen(false)} />
+                    <NotificationsPanel onClose={() => setNotifPath(null)} />
                   )}
                 </AnimatePresence>
               </div>
@@ -168,7 +165,7 @@ export default function Header() {
               <div className={styles.userDropWrap} ref={dropRef}>
                 <button
                   className={styles.avatarBtn}
-                  onClick={() => setUserDropOpen((v) => !v)}
+                  onClick={() => setUserDropPath(userDropOpen ? null : location.pathname)}
                 >
                   <div className={styles.avatarRing}>
                     {avatarUrl ? (
@@ -275,7 +272,7 @@ export default function Header() {
           {/* Бургер */}
           <button
             className={styles.burgerBtn}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => setMenuOpenPath(menuOpen ? null : location.pathname)}
           >
             {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>

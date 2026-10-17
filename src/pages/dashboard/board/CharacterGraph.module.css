@@ -39,6 +39,13 @@
   color: var(--color-text-faint);
 }
 
+.error {
+  margin: 0;
+  color: var(--color-error);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+
 .addForm {
   display: flex;
   gap: var(--space-3);

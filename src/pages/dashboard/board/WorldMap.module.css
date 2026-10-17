@@ -11,10 +11,13 @@
   position: absolute;
   top: var(--space-3);
   left: var(--space-3);
+  right: var(--space-3);
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  max-width: calc(100% - var(--space-6));
   padding: var(--space-2) var(--space-3);
   background: rgba(10, 11, 18, 0.85);
   backdrop-filter: blur(12px);
@@ -47,6 +50,42 @@
   background: var(--color-accent-faint);
 }
 
+.toolBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolBtnDanger:hover:not(:disabled) {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.publishMapToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.publishMapToggle input {
+  accent-color: var(--color-accent);
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .toolInfo {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -77,11 +116,51 @@
   transform-origin: 0 0;
 }
 
+.mapBackground {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.85;
+  pointer-events: none;
+  user-select: none;
+}
+
 .gridSvg {
   position: absolute;
   inset: 0;
+  z-index: 1;
   width: 100%;
   height: 100%;
+  pointer-events: none;
+}
+
+.errorBanner {
+  position: absolute;
+  top: 62px;
+  left: var(--space-3);
+  right: var(--space-3);
+  z-index: 12;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgba(232, 53, 74, 0.28);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: rgba(10, 11, 18, 0.94);
+  color: var(--color-error);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.errorBanner button {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
 }
 
 .mapBgKanji {
@@ -120,7 +199,9 @@
 .marker {
   position: absolute;
   transform: translate(-50%, -100%);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   z-index: 3;
   display: flex;
   flex-direction: column;
@@ -239,6 +320,31 @@
   line-height: 1.6;
 }
 
+.editorFieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+
+.editorPublish {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.editorPublish input {
+  margin-top: 2px;
+  accent-color: var(--color-accent);
+}
+
 .editorColors {
   display: flex;
   gap: 4px;
@@ -299,6 +405,46 @@
   cursor: pointer;
   transition: background var(--dur-fast);
 }
-.editorSave:hover {
+.editorSave:hover:not(:disabled) {
   background: #c42338;
+}
+
+.editorRemove:disabled,
+.editorSave:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .wrap {
+    min-height: 400px;
+  }
+
+  .mapContainer {
+    min-height: 400px;
+  }
+
+  .toolbar {
+    gap: var(--space-1);
+    padding: var(--space-2);
+  }
+
+  .toolBtn {
+    padding: var(--space-2);
+  }
+
+  .toolInfo {
+    flex: 1 1 72px;
+    text-align: center;
+  }
+
+  .editorPanel {
+    top: auto;
+    right: var(--space-2);
+    bottom: var(--space-2);
+    left: var(--space-2);
+    width: auto;
+    max-height: 78%;
+    overflow-y: auto;
+  }
 }

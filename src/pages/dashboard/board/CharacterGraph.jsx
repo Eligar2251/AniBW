@@ -11,6 +11,7 @@ import {
   Swords,
   Users,
   HelpCircle,
+  RotateCcw,
 } from "lucide-react";
 import { supabase } from "@lib/supabase";
 import { useAuthStore } from "@store/authStore";
@@ -32,14 +33,16 @@ function useCharacters(workId) {
   return useQuery({
     queryKey: ["graph-characters", workId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("characters")
         .select("id, full_name, nickname, avatar_url, primary_color, role")
         .eq("author_id", user.id)
+        .eq("work_id", workId)
         .order("full_name");
+      if (error) throw error;
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!user && !!workId,
   });
 }
 
@@ -63,9 +66,18 @@ export default function CharacterGraph({ workId }) {
   const queryClient = useQueryClient();
   const svgRef = useRef(null);
 
-  const { data: characters = [] } = useCharacters(workId);
-  const { data: relations = [] } = useRelations(workId);
+  const {
+    data: characters = [],
+    isLoading: charactersLoading,
+    error: charactersError,
+  } = useCharacters(workId);
+  const {
+    data: relations = [],
+    isLoading: relationsLoading,
+    error: relationsError,
+  } = useRelations(workId);
 
+  const [actionError, setActionError] = useState("");
   const [addingRelation, setAddingRelation] = useState(false);
   const [sourceId, setSourceId] = useState("");
   const [targetId, setTargetId] = useState("");
@@ -117,24 +129,57 @@ export default function CharacterGraph({ workId }) {
       setSourceId("");
       setTargetId("");
       setRelLabel("");
+      setActionError("");
     },
+    onError: (error) => setActionError(error.message || "Не удалось создать связь"),
   });
 
   const removeRelation = useMutation({
     mutationFn: async (id) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("character_relations")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Связь не найдена или у вас нет доступа к ней.");
     },
     onSuccess: () => {
       setSelectedRelation(null);
       queryClient.invalidateQueries({
         queryKey: ["character-relations", workId],
       });
+      setActionError("");
     },
+    onError: (error) => setActionError(error.message || "Не удалось удалить связь"),
   });
+
+  if (charactersLoading || relationsLoading) {
+    return <div className={styles.empty}>Загружаем граф персонажей…</div>;
+  }
+
+  if (charactersError || relationsError) {
+    return (
+      <div className={styles.empty} role="alert">
+        <p>Не удалось загрузить граф: {charactersError?.message || relationsError?.message}</p>
+        <button
+          type="button"
+          className={styles.toolBtn}
+          onClick={() => {
+            if (charactersError) {
+              queryClient.refetchQueries({ queryKey: ["graph-characters", workId] });
+            }
+            if (relationsError) {
+              queryClient.refetchQueries({ queryKey: ["character-relations", workId] });
+            }
+          }}
+        >
+          <RotateCcw size={14} /> Повторить
+        </button>
+      </div>
+    );
+  }
 
   if (characters.length === 0) {
     return (
@@ -163,6 +208,12 @@ export default function CharacterGraph({ workId }) {
           {characters.length} персонажей · {relations.length} связей
         </span>
       </div>
+
+      {actionError && (
+        <p className={styles.error} role="alert">
+          {actionError}
+        </p>
+      )}
 
       {/* Форма добавления */}
       <AnimatePresence>

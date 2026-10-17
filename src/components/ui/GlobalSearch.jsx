@@ -22,12 +22,13 @@ export default function GlobalSearch() {
 
   // Фокус при открытии
   useEffect(() => {
-    if (searchOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    } else {
+    if (!searchOpen) {
       setQuery("");
+      return undefined;
     }
-  }, [searchOpen]);
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 100);
+    return () => window.clearTimeout(timer);
+  }, [searchOpen, setQuery]);
 
   // Esc для закрытия
   useEffect(() => {
@@ -36,7 +37,7 @@ export default function GlobalSearch() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [closeSearch]);
 
   const POPULAR_TAGS = [
     "Naruto",

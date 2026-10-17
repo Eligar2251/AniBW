@@ -15,6 +15,7 @@ import PageLoader from "@components/ui/PageLoader";
 const HomePage = lazy(() => import("@pages/HomePage"));
 const WorksPage = lazy(() => import("@pages/WorksPage"));
 const WorkPage = lazy(() => import("@pages/WorkPage"));
+const WorldWikiPage = lazy(() => import("@pages/WorldWikiPage"));
 const ReaderPage = lazy(() => import("@pages/ReaderPage"));
 const FandomPage = lazy(() => import("@pages/FandomPage"));
 const SearchPage = lazy(() => import("@pages/SearchPage"));
@@ -92,6 +93,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/works" element={<WorksPage />} />
             <Route path="/works/:id" element={<WorkPage />} />
+            <Route path="/works/:id/world" element={<WorldWikiPage />} />
             <Route path="/fandoms/:slug" element={<FandomPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/profile/:username" element={<ProfilePage />} />

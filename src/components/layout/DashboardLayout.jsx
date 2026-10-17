@@ -1,7 +1,11 @@
 // src/components/layout/DashboardLayout.jsx
 import { Outlet, NavLink, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@lib/supabase";
+import NotificationsPanel from "@components/ui/NotificationsPanel";
+import { useRealtimeNotifications } from "@hooks/useRealtimeNotifications";
 import {
   LayoutDashboard,
   BookOpen,
@@ -23,11 +27,50 @@ const NAV_ITEMS = [
   { to: "/dashboard/characters", icon: Users, label: "Персонажи" },
 ];
 
+function useUnreadCount() {
+  const user = useAuthStore((s) => s.user);
+  return useQuery({
+    queryKey: ["unread-count", user?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("is_read", false);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
+}
+
 export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef(null);
   const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
+  const { data: unreadCount = 0 } = useUnreadCount();
+  useRealtimeNotifications();
   const avatarUrl = getCloudinaryUrl(profile?.avatar_url, transforms.avatarSm);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!notificationsRef.current?.contains(event.target)) {
+        setNotificationsOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setNotificationsOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   return (
     <div className={styles.root}>
@@ -167,10 +210,33 @@ export default function DashboardLayout() {
               <PenLine size={14} strokeWidth={1.5} />
               Новое произведение
             </Link>
-            <button className={styles.topbarIcon}>
-              <Bell size={16} strokeWidth={1.5} />
-              <span className={styles.notifDot} />
-            </button>
+            <div className={styles.notificationWrap} ref={notificationsRef}>
+              <button
+                type="button"
+                className={styles.topbarIcon}
+                onClick={() => setNotificationsOpen((open) => !open)}
+                aria-label={
+                  unreadCount > 0
+                    ? `Уведомления: ${unreadCount} непрочитанных`
+                    : "Уведомления"
+                }
+                aria-expanded={notificationsOpen}
+              >
+                <Bell size={16} strokeWidth={1.5} />
+                {unreadCount > 0 && (
+                  <span className={styles.notifDot}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              <AnimatePresence>
+                {notificationsOpen && (
+                  <NotificationsPanel
+                    onClose={() => setNotificationsOpen(false)}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </header>
 
