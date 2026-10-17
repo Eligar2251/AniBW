@@ -17,6 +17,7 @@ import {
   Layout,
   ExternalLink,
   RotateCcw,
+  Mountain,
 } from "lucide-react";
 import { supabase } from "@lib/supabase";
 import { useAuthStore } from "@store/authStore";
@@ -24,6 +25,7 @@ import WorldMap from "./board/WorldMap";
 import CharacterGraph from "./board/CharacterGraph";
 import FreeCanvas from "./board/FreeCanvas";
 import WorldCodex from "@components/worldbuilding/WorldCodex";
+import WorldMapBuilder from "@components/worldbuilding/WorldMapBuilder";
 import styles from "./WorldBoardPage.module.css";
 
 const TABS = [
@@ -31,7 +33,8 @@ const TABS = [
   { id: "notes", icon: StickyNote, label: "Заметки", dbType: "note" },
   { id: "lore", icon: BookMarked, label: "Лор", dbType: "lore_page" },
   { id: "codex", icon: BookOpen, label: "Кодекс", dbType: null },
-  { id: "map", icon: Map, label: "Карта", dbType: null },
+  { id: "terrain", icon: Mountain, label: "Карта 2D/3D", dbType: null },
+  { id: "map", icon: Map, label: "Метки", dbType: null },
   { id: "graph", icon: GitBranch, label: "Связи", dbType: null },
   { id: "canvas", icon: Layout, label: "Канвас", dbType: null },
 ];
@@ -161,8 +164,11 @@ export default function WorldBoardPage() {
           </div>
         </div>
         <div className={styles.headerActions}>
-          {activeTab === "codex" && work && (
-            <Link className={styles.previewBtn} to={`/works/${work.id}/world`}>
+          {(activeTab === "codex" || activeTab === "terrain" || activeTab === "map") && work && (
+            <Link
+              className={styles.previewBtn}
+              to={activeTab === "codex" ? `/works/${work.id}/world` : `/works/${work.id}/world?view=map`}
+            >
               <ExternalLink size={14} strokeWidth={1.5} />
               Публичный вид
             </Link>
@@ -263,6 +269,7 @@ export default function WorldBoardPage() {
             />
           )}
           {activeTab === "codex" && <WorldCodex workId={workId} />}
+          {activeTab === "terrain" && <WorldMapBuilder workId={workId} />}
           {activeTab === "map" && <WorldMap workId={workId} />}
           {activeTab === "graph" && <CharacterGraph workId={workId} />}
           {activeTab === "canvas" && <FreeCanvas workId={workId} />}

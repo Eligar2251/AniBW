@@ -40,7 +40,7 @@ function useMapBackground(workId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("world_map_settings")
-        .select("background_url, is_published")
+        .select("work_id, background_url, is_published, map_state, updated_at")
         .eq("work_id", workId)
         .maybeSingle();
       if (error) throw error;

@@ -28,7 +28,7 @@ function usePublicMapSettings(workId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("world_map_settings")
-        .select("background_url")
+        .select("background_url, map_state")
         .eq("work_id", workId)
         .eq("is_published", true)
         .maybeSingle();
@@ -125,6 +125,7 @@ export default function WorldWikiPage() {
           <PublicWorldMap
             workId={work.id}
             backgroundUrl={mapSettings?.background_url || null}
+            mapState={mapSettings?.map_state || null}
             settingsError={mapSettingsError}
             onOpenEntry={openEntry}
           />

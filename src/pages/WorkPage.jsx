@@ -85,10 +85,10 @@ function usePublicWorldAvailability(workId) {
           .eq("is_published", true),
         supabase
           .from("world_map_settings")
-          .select("work_id", { count: "exact", head: true })
+          .select("background_url, map_state")
           .eq("work_id", workId)
           .eq("is_published", true)
-          .not("background_url", "is", null),
+          .maybeSingle(),
       ]);
       if (entriesResult.error) throw entriesResult.error;
       if (markersResult.error) throw markersResult.error;
@@ -96,7 +96,8 @@ function usePublicWorldAvailability(workId) {
       return (
         (entriesResult.count || 0) > 0 ||
         (markersResult.count || 0) > 0 ||
-        (mapResult.count || 0) > 0
+        Boolean(mapResult.data?.background_url) ||
+        (mapResult.data?.map_state?.tiles?.length || 0) > 0
       );
     },
     enabled: !!workId,

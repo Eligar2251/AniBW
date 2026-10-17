@@ -154,9 +154,143 @@
   color: var(--color-error);
 }
 
+.viewControls {
+  display: flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-raised);
+}
+
+.viewControls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  padding: 0 11px;
+  color: var(--color-text-muted);
+  border-radius: 5px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.viewControls button:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.viewControls button.viewActive {
+  color: #f2dfbb;
+  background: rgba(185, 124, 48, 0.18);
+}
+
+.terrainViewport {
+  max-height: 620px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: #0c1210;
+  overscroll-behavior: contain;
+}
+
+.terrainPlane {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.terrainPlane :global(.world-map-canvas) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+.terrain3d {
+  height: 540px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: #0b1012;
+}
+
+.terrain3d :global(.world-map-3d-canvas) {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.terrain3d :global(.world-map-3d-stage) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.terrain3d :global(.world-map-3d-canvas canvas) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.terrain3d :global(.world-map-3d-hint) {
+  position: absolute;
+  z-index: 2;
+  bottom: 10px;
+  left: 12px;
+  padding: 6px 9px;
+  color: rgba(239, 231, 208, 0.73);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: rgba(8, 11, 13, 0.72);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.error button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  background: var(--color-bg);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  cursor: pointer;
+}
+
 @media (max-width: 600px) {
   .canvas {
     min-height: 360px;
+  }
+
+  .terrainViewport {
+    max-height: 500px;
+    padding: 7px;
+  }
+
+  .terrain3d {
+    height: 400px;
   }
 
   .infoCard {
