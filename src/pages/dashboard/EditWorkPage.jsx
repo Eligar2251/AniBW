@@ -12,11 +12,12 @@ function useWork(id) {
   return useQuery({
     queryKey: ["dashboard-work", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("works")
         .select("*")
         .eq("id", id)
         .single();
+      if (error) throw error;
       return data;
     },
     enabled: !!id,
@@ -27,13 +28,14 @@ function useWorkChapters(workId) {
   return useQuery({
     queryKey: ["work-chapters-dashboard", workId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("chapters")
         .select(
           "id, title, chapter_number, status, words_count, published_at, scheduled_at",
         )
         .eq("work_id", workId)
         .order("chapter_number");
+      if (error) throw error;
       return data || [];
     },
     enabled: !!workId,
@@ -46,14 +48,31 @@ export default function EditWorkPage() {
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
 
-  const { data: work, isLoading: workLoading } = useWork(id);
-  const { data: chapters, isLoading: chaptersLoading } = useWorkChapters(id);
+  const {
+    data: work,
+    isLoading: workLoading,
+    error: workError,
+  } = useWork(id);
+  const {
+    data: chapters,
+    isLoading: chaptersLoading,
+    error: chaptersError,
+  } = useWorkChapters(id);
 
   const [activeTab, setActiveTab] = useState("info");
 
   const createChapter = useMutation({
     mutationFn: async () => {
-      const nextNum = (chapters?.length || 0) + 1;
+      const { data: lastChapter, error: lastChapterError } = await supabase
+        .from("chapters")
+        .select("chapter_number")
+        .eq("work_id", id)
+        .order("chapter_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastChapterError) throw lastChapterError;
+
+      const nextNum = (lastChapter?.chapter_number || 0) + 1;
       const { data, error } = await supabase
         .from("chapters")
         .insert({
@@ -78,9 +97,60 @@ export default function EditWorkPage() {
     },
   });
 
+  const duplicateChapter = useMutation({
+    mutationFn: async (chapterId) => {
+      const { data: source, error: sourceError } = await supabase
+        .from("chapters")
+        .select("title, content, content_text, words_count, author_note_before, author_note_after")
+        .eq("id", chapterId)
+        .eq("work_id", id)
+        .single();
+      if (sourceError) throw sourceError;
+
+      const { data: lastChapter, error: lastChapterError } = await supabase
+        .from("chapters")
+        .select("chapter_number")
+        .eq("work_id", id)
+        .order("chapter_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastChapterError) throw lastChapterError;
+
+      const chapterNumber = (lastChapter?.chapter_number || 0) + 1;
+      const { data, error } = await supabase
+        .from("chapters")
+        .insert({
+          work_id: id,
+          author_id: user.id,
+          chapter_number: chapterNumber,
+          title: `${source.title} — копия`.slice(0, 200),
+          content: source.content,
+          content_text: source.content_text,
+          words_count: source.words_count,
+          author_note_before: source.author_note_before,
+          author_note_after: source.author_note_after,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (chapter) => {
+      queryClient.invalidateQueries({
+        queryKey: ["work-chapters-dashboard", id],
+      });
+      navigate(`/dashboard/works/${id}/chapters/${chapter.id}`);
+    },
+  });
+
   const deleteChapter = useMutation({
     mutationFn: async (chapterId) => {
-      await supabase.from("chapters").delete().eq("id", chapterId);
+      const { error } = await supabase
+        .from("chapters")
+        .delete()
+        .eq("id", chapterId);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -98,6 +168,14 @@ export default function EditWorkPage() {
         />
       </div>
     );
+
+  if (workError || !work) {
+    return (
+      <div className={styles.page}>
+        <p role="alert">Произведение не найдено или у вас нет доступа.</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -128,13 +206,22 @@ export default function EditWorkPage() {
           <button
             className={styles.newChapterBtn}
             onClick={() => createChapter.mutate()}
-            disabled={createChapter.isPending}
+            disabled={createChapter.isPending || chaptersLoading}
           >
             <Plus size={14} strokeWidth={1.5} />
             {createChapter.isPending ? "Создаю..." : "Новая глава"}
           </button>
         </div>
       </motion.div>
+
+      {(createChapter.isError || duplicateChapter.isError || deleteChapter.isError) && (
+        <p role="alert">
+          {createChapter.error?.message ||
+            duplicateChapter.error?.message ||
+            deleteChapter.error?.message ||
+            "Не удалось выполнить действие."}
+        </p>
+      )}
 
       {/* Табы */}
       <div className={styles.tabs}>
@@ -162,6 +249,8 @@ export default function EditWorkPage() {
             Array.from({ length: 3 }, (_, i) => (
               <div key={i} className={`skeleton ${styles.skeletonChapter}`} />
             ))
+          ) : chaptersError ? (
+            <p role="alert">Не удалось загрузить список глав.</p>
           ) : chapters?.length === 0 ? (
             <div className={styles.empty}>
               <span className={styles.emptyKanji}>空</span>
@@ -169,6 +258,7 @@ export default function EditWorkPage() {
               <button
                 className={styles.emptyBtn}
                 onClick={() => createChapter.mutate()}
+                disabled={createChapter.isPending || chaptersLoading}
               >
                 Создать первую главу
               </button>
@@ -217,7 +307,12 @@ export default function EditWorkPage() {
                   >
                     <PenLine size={14} strokeWidth={1.5} />
                   </button>
-                  <button className={styles.chapterBtn} title="Дублировать">
+                  <button
+                    className={styles.chapterBtn}
+                    title="Дублировать"
+                    onClick={() => duplicateChapter.mutate(ch.id)}
+                    disabled={duplicateChapter.isPending}
+                  >
                     <Copy size={14} strokeWidth={1.5} />
                   </button>
                   <button
@@ -275,7 +370,12 @@ function WorkInfoForm({ work, workId }) {
     mutationFn: async () => {
       const { error } = await supabase
         .from("works")
-        .update(form)
+        .update({
+          ...form,
+          title: form.title.trim(),
+          summary: form.summary.trim() || null,
+          description: form.description.trim() || null,
+        })
         .eq("id", workId);
       if (error) throw error;
     },
@@ -283,6 +383,15 @@ function WorkInfoForm({ work, workId }) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       queryClient.invalidateQueries({ queryKey: ["dashboard-work", workId] });
+      queryClient.invalidateQueries({ queryKey: ["work", workId] });
+      queryClient.invalidateQueries({ queryKey: ["works"] });
+      queryClient.invalidateQueries({ queryKey: ["infinite-works"] });
+      queryClient.invalidateQueries({ queryKey: ["search"] });
+      queryClient.invalidateQueries({ queryKey: ["search-results"] });
+      queryClient.invalidateQueries({ queryKey: ["hot-works"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["hero-covers"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 
@@ -369,6 +478,9 @@ function WorkInfoForm({ work, workId }) {
           </div>
         ))}
       </div>
+      {updateWork.isError && (
+        <p role="alert">Не удалось сохранить изменения: {updateWork.error.message}</p>
+      )}
       <div className={styles.infoActions}>
         <button
           type="submit"

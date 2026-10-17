@@ -1,6 +1,6 @@
 // src/components/ui/NotificationsPanel.jsx
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
@@ -33,17 +33,13 @@ function useNotifications() {
   return useQuery({
     queryKey: ["notifications", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("notifications")
-        .select(
-          `
-          *,
-          actor:profiles(username, display_name, avatar_url)
-        `,
-        )
+        .select("*, actor:profiles(username, display_name, avatar_url)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(30);
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user,
@@ -51,29 +47,44 @@ function useNotifications() {
 }
 
 export default function NotificationsPanel({ onClose }) {
-  const { data: notifications = [], isLoading } = useNotifications();
+  const {
+    data: notifications = [],
+    isLoading,
+    error: notificationsError,
+  } = useNotifications();
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
+  const invalidateNotifications = () => {
+    queryClient.invalidateQueries({ queryKey: ["notifications", user.id] });
+    queryClient.invalidateQueries({ queryKey: ["unread-count", user.id] });
+  };
+
   const markAllRead = useMutation({
     mutationFn: async () => {
-      await supabase
+      const { error } = await supabase
         .from("notifications")
         .update({ is_read: true })
         .eq("user_id", user.id)
         .eq("is_read", false);
+      if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications", user.id] });
-    },
+    onSuccess: invalidateNotifications,
   });
 
-  const markRead = async (id) => {
-    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-    queryClient.invalidateQueries({ queryKey: ["notifications", user.id] });
-  };
+  const markRead = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidateNotifications,
+  });
 
   return (
     <motion.div
@@ -96,6 +107,7 @@ export default function NotificationsPanel({ onClose }) {
             <button
               className={styles.markAllBtn}
               onClick={() => markAllRead.mutate()}
+              disabled={markAllRead.isPending}
               title="Отметить все как прочитанные"
             >
               <CheckCheck size={14} strokeWidth={1.5} />
@@ -125,6 +137,10 @@ export default function NotificationsPanel({ onClose }) {
               </div>
             </div>
           ))
+        ) : notificationsError ? (
+          <div className={styles.empty}>
+            <p role="alert">Не удалось загрузить уведомления.</p>
+          </div>
         ) : notifications.length === 0 ? (
           <div className={styles.empty}>
             <span className={styles.emptyKanji}>鐘</span>
@@ -135,23 +151,52 @@ export default function NotificationsPanel({ onClose }) {
             <NotifItem
               key={notif.id}
               notif={notif}
-              onRead={() => markRead(notif.id)}
+              onRead={() => markRead.mutate(notif.id)}
+              onClose={onClose}
             />
           ))
+        )}
+        {(markAllRead.isError || markRead.isError) && (
+          <div className={styles.empty}>
+            <p role="alert">Не удалось обновить уведомление.</p>
+          </div>
         )}
       </div>
     </motion.div>
   );
 }
 
-function NotifItem({ notif, onRead }) {
+function NotifItem({ notif, onRead, onClose }) {
   const typeInfo = TYPE_ICONS[notif.type] || TYPE_ICONS.system;
   const Icon = typeInfo.icon;
+  const navigate = useNavigate();
+  const destination = notif.chapter_id && notif.work_id
+    ? `/works/${notif.work_id}/read/${notif.chapter_id}`
+    : notif.work_id
+      ? `/works/${notif.work_id}`
+      : notif.actor?.username
+        ? `/profile/${notif.actor.username}`
+        : null;
+
+  const handleClick = (event) => {
+    if (!notif.is_read) onRead();
+    onClose?.();
+    if (event.target.closest("a")) return;
+    if (destination) navigate(destination);
+  };
 
   return (
     <div
       className={`${styles.item} ${!notif.is_read ? styles.itemUnread : ""}`}
-      onClick={() => !notif.is_read && onRead()}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleClick(event);
+        }
+      }}
     >
       {/* Иконка */}
       <div

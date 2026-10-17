@@ -18,13 +18,25 @@ function useBookmarks(folder) {
   return useQuery({
     queryKey: ["bookmarks", user?.id, folder],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data: bookmarks, error: bookmarkError } = await supabase
         .from("bookmarks")
-        .select("work:works_full(*)")
+        .select("work_id, added_at")
         .eq("user_id", user.id)
         .eq("folder", folder)
         .order("added_at", { ascending: false });
-      return (data || []).map((b) => b.work).filter(Boolean);
+      if (bookmarkError) throw bookmarkError;
+
+      const ids = (bookmarks || []).map((bookmark) => bookmark.work_id);
+      if (ids.length === 0) return [];
+
+      const { data: works, error: worksError } = await supabase
+        .from("works_full")
+        .select("*")
+        .in("id", ids);
+      if (worksError) throw worksError;
+
+      const worksById = new Map((works || []).map((work) => [work.id, work]));
+      return ids.map((id) => worksById.get(id)).filter(Boolean);
     },
     enabled: !!user,
   });

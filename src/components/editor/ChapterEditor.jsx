@@ -50,10 +50,12 @@ export default function ChapterEditor({
   autoSaveInterval = 30000,
   placeholder = "Начни историю...",
   disabled = false,
+  onRegisterSave,
 }) {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [wordGoalDone, setWordGoalDone] = useState(false);
   const autoSaveRef = useRef(null);
@@ -96,8 +98,9 @@ export default function ChapterEditor({
   // ── Автосохранение ──
   const handleSave = useCallback(
     async (type = "auto") => {
-      if (!editor || !onSave) return;
+      if (!editor || !onSave || disabled) return false;
       setIsSaving(true);
+      setSaveError("");
       try {
         await onSave({
           content: editor.getHTML(),
@@ -106,19 +109,30 @@ export default function ChapterEditor({
           saveType: type,
         });
         setLastSaved(new Date());
+        return true;
+      } catch (error) {
+        console.error("Chapter save failed:", error);
+        setSaveError(error?.message || "Ошибка сохранения");
+        return false;
       } finally {
         setIsSaving(false);
       }
     },
-    [editor, onSave],
+    [editor, onSave, disabled],
   );
 
   useEffect(() => {
     autoSaveRef.current = setInterval(() => {
-      handleSave("auto");
+      void handleSave("auto");
     }, autoSaveInterval);
     return () => clearInterval(autoSaveRef.current);
   }, [handleSave, autoSaveInterval]);
+
+  useEffect(() => {
+    if (!onRegisterSave) return;
+    onRegisterSave(handleSave);
+    return () => onRegisterSave(null);
+  }, [handleSave, onRegisterSave]);
 
   // Ctrl+S
   useEffect(() => {
@@ -323,11 +337,13 @@ export default function ChapterEditor({
       <div className={styles.statusBar}>
         <div className={styles.statusLeft}>
           {/* Автосохранение */}
-          <span className={styles.statusItem}>
+          <span className={styles.statusItem} title={saveError || undefined}>
             <Clock size={11} strokeWidth={1.5} />
-            {lastSaved
-              ? `Сохранено в ${lastSaved.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}`
-              : "Не сохранено"}
+            {saveError
+              ? "Ошибка сохранения"
+              : lastSaved
+                ? `Сохранено в ${lastSaved.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}`
+                : "Не сохранено"}
           </span>
         </div>
 

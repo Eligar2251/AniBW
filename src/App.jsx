@@ -1,6 +1,6 @@
 // src/App.jsx
 import { Routes, Route, useLocation } from "react-router-dom";
-import { useEffect, lazy, Suspense, useRef } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { AnimatePresence } from "framer-motion";
 import { supabase } from "@lib/supabase";
 import { useAuthStore } from "@store/authStore";
@@ -46,52 +46,37 @@ export default function App() {
   const loading = useAuthStore((s) => s.loading);
   const initialized = useAuthStore((s) => s.initialized);
 
-  const initRef = useRef(false);
-
   useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
+    let active = true;
 
-    // Первичная инициализация
-    initialize();
+    // The auth subscription must be re-created during React StrictMode's
+    // development setup/cleanup cycle, so initialization stays idempotent in
+    // the store instead of being guarded by a component ref.
+    void initialize();
 
-    // Слушаем изменения авторизации
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("[Auth]", event);
-
-      if (event === "SIGNED_OUT") {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || !session?.user) {
         setSession(null);
         setProfile(null);
         return;
       }
 
-      if (
-        event === "SIGNED_IN" ||
-        event === "TOKEN_REFRESHED" ||
-        event === "USER_UPDATED"
-      ) {
-        setSession(session);
+      setSession(session);
 
-        if (session?.user) {
-          // При SIGNED_IN даём время триггеру БД создать профиль
-          const delay = event === "SIGNED_IN" ? 1200 : 0;
-          if (delay) await new Promise((r) => setTimeout(r, delay));
-
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .maybeSingle();
-
-          setProfile(profile ?? null);
-        }
-      }
+      // Do not await a Supabase query from inside its auth callback; that can
+      // hold the auth lock while the query tries to read the session.
+      queueMicrotask(() => {
+        if (active) void useAuthStore.getState().refreshProfile();
+      });
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [initialize, setProfile, setSession]);
 
   // Показываем лоадер только при первом запуске
   if (!initialized && loading) {

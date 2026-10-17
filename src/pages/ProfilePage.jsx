@@ -11,21 +11,22 @@ function useProfile(username) {
   return useQuery({
     queryKey: ["profile", username],
     queryFn: async () => {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("*")
         .eq("username", username)
         .single();
+      if (profileError) throw profileError;
 
-      if (!profile) throw new Error("Пользователь не найден");
-
-      const { data: works } = await supabase
+      const { data: works, error: worksError } = await supabase
         .from("works_full")
         .select("*")
         .eq("author_id", profile.id)
         .eq("visibility", "public")
+        .neq("status", "draft")
         .order("created_at", { ascending: false })
         .limit(12);
+      if (worksError) throw worksError;
 
       return { profile, works: works || [] };
     },
@@ -35,7 +36,7 @@ function useProfile(username) {
 
 export default function ProfilePage() {
   const { username } = useParams();
-  const { data, isLoading } = useProfile(username);
+  const { data, isLoading, error } = useProfile(username);
 
   if (isLoading)
     return (
@@ -46,7 +47,20 @@ export default function ProfilePage() {
       </div>
     );
 
-  const { profile, works } = data || {};
+  if (error || !data) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.container}>
+          <div className={styles.empty}>
+            <span className={styles.emptyKanji}>無</span>
+            <p>Пользователь не найден</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { profile, works } = data;
   const avatarUrl = getCloudinaryUrl(profile?.avatar_url, transforms.avatar);
   const bannerUrl = getCloudinaryUrl(profile?.banner_url, transforms.banner);
 

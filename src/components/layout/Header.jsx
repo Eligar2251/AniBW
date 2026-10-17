@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@lib/supabase";
 import { getCloudinaryUrl, transforms } from "@lib/cloudinary";
 import NotificationsPanel from "@components/ui/NotificationsPanel";
+import { useRealtimeNotifications } from "@hooks/useRealtimeNotifications";
 import styles from "./Header.module.css";
 
 function useUnreadCount() {
@@ -26,11 +27,12 @@ function useUnreadCount() {
   return useQuery({
     queryKey: ["unread-count", user?.id],
     queryFn: async () => {
-      const { count } = await supabase
+      const { count, error } = await supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .eq("is_read", false);
+      if (error) throw error;
       return count || 0;
     },
     enabled: !!user,
@@ -53,6 +55,7 @@ export default function Header() {
   const isAuthor = useAuthStore((s) => s.isAuthor);
 
   const { data: unreadCount = 0 } = useUnreadCount();
+  useRealtimeNotifications();
 
   const openAuthModal = useUIStore((s) => s.openAuthModal);
   const openSearch = useUIStore((s) => s.openSearch);

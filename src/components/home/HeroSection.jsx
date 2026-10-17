@@ -22,6 +22,7 @@ function useHeroCovers() {
         .from("works")
         .select("id, title, cover_url, author:profiles(username, display_name)")
         .eq("visibility", "public")
+        .neq("status", "draft")
         .not("cover_url", "is", null)
         .order("views_count", { ascending: false })
         .limit(12);

@@ -14,14 +14,14 @@ export default function ProtectedRoute({ children, authorOnly = false }) {
     if (!loading && !user) {
       openAuthModal("login");
     }
-  }, [loading, user]);
+  }, [loading, user, openAuthModal]);
 
   if (loading) return null;
   if (!user) return <Navigate to="/" replace />;
 
   if (authorOnly) {
     const allowed = ["author", "moderator", "admin"].includes(profile?.role);
-    if (!allowed) return <Navigate to="/dashboard-upgrade" replace />;
+    if (!allowed) return <Navigate to="/" replace />;
   }
 
   return children;

@@ -6,25 +6,25 @@ import { useAuthStore } from "@store/authStore";
 
 export function useRealtimeNotifications() {
   const queryClient = useQueryClient();
-  const user = useAuthStore((s) => s.user);
+  const user = useAuthStore((state) => state.user);
+  const userId = user?.id;
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return undefined;
 
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(`notifications:${userId}`)
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "notifications",
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         () => {
-          queryClient.invalidateQueries({
-            queryKey: ["notifications", user.id],
-          });
+          queryClient.invalidateQueries({ queryKey: ["notifications", userId] });
+          queryClient.invalidateQueries({ queryKey: ["unread-count", userId] });
         },
       )
       .subscribe();
@@ -32,5 +32,5 @@ export function useRealtimeNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, queryClient]);
+  }, [userId, queryClient]);
 }
