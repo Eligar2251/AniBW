@@ -56,7 +56,11 @@ export default function PublicWorldMap({
     enabled: !!workId,
   });
 
-  const hasTerrainMap = Array.isArray(mapState?.strokes) || Array.isArray(mapState?.tiles);
+  const hasTerrainMap =
+    Array.isArray(mapState?.strokes) ||
+    Array.isArray(mapState?.tiles) ||
+    Array.isArray(mapState?.stamps) ||
+    Array.isArray(mapState?.countries);
   const normalizedMapState = useMemo(
     () => hasTerrainMap ? normalizeMapState(mapState) : null,
     [hasTerrainMap, mapState],

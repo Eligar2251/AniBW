@@ -6,7 +6,7 @@ alter table public.world_map_settings
     check (jsonb_typeof(map_state) = 'object');
 
 comment on column public.world_map_settings.map_state is
-  'Serializable tile map: dimensions, terrain tile ids, imported texture atlas crops and named settlements.';
+  'Serializable 2D/3D map: dimensions, freehand terrain and wall strokes, texture atlas crops, object stamps, country boundaries, and named settlements.';
 
 grant select (work_id, background_url, is_published, updated_at, map_state)
   on public.world_map_settings to anon, authenticated;

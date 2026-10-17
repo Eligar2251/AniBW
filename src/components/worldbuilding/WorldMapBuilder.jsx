@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Brush,
@@ -8,6 +8,8 @@ import {
   Globe2,
   Layers,
   MapPinned,
+  Maximize2,
+  Minimize2,
   Minus,
   Mountain,
   PaintBucket,
@@ -86,21 +88,30 @@ function MapBuilderEditor({ workId, settings }) {
   const queryClient = useQueryClient();
   const sheetInputRef = useRef(null);
   const replaceInputRef = useRef(null);
+  const workspaceRef = useRef(null);
   const revisionRef = useRef(0);
   const [mapState, setMapState] = useState(() => normalizeMapState(settings?.map_state));
   const [selectedTextureId, setSelectedTextureId] = useState("grass");
   const [tool, setTool] = useState("brush");
   const [brushSize, setBrushSize] = useState(0.055);
   const [brushOpacity, setBrushOpacity] = useState(1);
+  const [stampSize, setStampSize] = useState(0.1);
   const [cityType, setCityType] = useState("city");
+  const [selectedCountryId, setSelectedCountryId] = useState(null);
+  const [countryName, setCountryName] = useState("Новая страна");
+  const [countryColor, setCountryColor] = useState("#d9895b");
+  const [countryDraftCount, setCountryDraftCount] = useState(0);
+  const [countryFinishSignal, setCountryFinishSignal] = useState(0);
+  const [countryCancelSignal, setCountryCancelSignal] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewMode, setViewMode] = useState("2d");
-  const [zoom, setZoom] = useState(0.85);
+  const [zoom, setZoom] = useState(0.95);
   const [sheetColumns, setSheetColumns] = useState(4);
   const [sheetRows, setSheetRows] = useState(4);
   const [uploading, setUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [hasSavedMap, setHasSavedMap] = useState(
-    Array.isArray(settings?.map_state?.strokes) || Array.isArray(settings?.map_state?.tiles),
+    Array.isArray(settings?.map_state?.strokes) || Array.isArray(settings?.map_state?.tiles) || Array.isArray(settings?.map_state?.stamps),
   );
   const [isPublished, setIsPublished] = useState(Boolean(settings?.is_published));
   const [actionError, setActionError] = useState("");
@@ -110,6 +121,12 @@ function MapBuilderEditor({ workId, settings }) {
     [mapState.textures],
   );
   const selectedTexture = textures.find((texture) => texture.id === selectedTextureId) || textures[0];
+
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
 
   const saveMap = useMutation({
     mutationFn: async () => {
@@ -182,6 +199,83 @@ function MapBuilderEditor({ workId, settings }) {
     }));
   };
 
+  const addStamp = (stamp) => {
+    if (!stamp?.textureId) return;
+    updateMap((current) => ({ ...current, stamps: [...(current.stamps || []), stamp].slice(-3000) }));
+  };
+
+  const addStamps = (stamps) => {
+    if (!stamps?.length) return;
+    updateMap((current) => ({
+      ...current,
+      stamps: [...(current.stamps || []), ...stamps].slice(-3000),
+    }));
+  };
+
+  const addCountry = (points) => {
+    const name = countryName.trim() || `Страна ${(mapState.countries || []).length + 1}`;
+    if (points?.length < 3) {
+      setActionError("Для границы страны нужно не менее трёх точек.");
+      return;
+    }
+    const country = {
+      id: createId("country"),
+      name: name.slice(0, 80),
+      color: countryColor,
+      points: points.map((point) => ({ x: point.x, y: point.y })),
+    };
+    updateMap((current) => ({
+      ...current,
+      countries: [...(current.countries || []), country].slice(-100),
+    }));
+    setSelectedCountryId(country.id);
+    setCountryName("Новая страна");
+    setStatusMessage(`Граница «${country.name}» добавлена.`);
+  };
+
+  const deleteStamp = (stampId) => {
+    updateMap((current) => ({
+      ...current,
+      stamps: (current.stamps || []).filter((stamp) => stamp.id !== stampId),
+    }));
+  };
+
+  const deleteCountry = (countryId) => {
+    updateMap((current) => ({
+      ...current,
+      countries: (current.countries || []).filter((country) => country.id !== countryId),
+    }));
+    setSelectedCountryId((current) => (current === countryId ? null : current));
+  };
+
+  const selectTexture = (texture) => {
+    setSelectedTextureId(texture.id);
+    setStampSize(texture.defaultSize || 0.08);
+    if (texture.placement === "stamp") setTool("stamp");
+    else if (texture.placement === "scatter") setTool("scatter");
+    else if (tool === "stamp" || tool === "scatter") setTool("brush");
+  };
+
+  const toggleFullscreen = async () => {
+    const target = workspaceRef.current;
+    if (!target) return;
+    try {
+      if (document.fullscreenElement === target) await document.exitFullscreen();
+      else if (target.requestFullscreen) await target.requestFullscreen();
+      else throw new Error("Полноэкранный режим не поддерживается этим браузером.");
+    } catch (fullscreenError) {
+      setActionError(fullscreenError.message || "Не удалось открыть редактор на весь экран.");
+    }
+  };
+
+  const changeViewMode = (nextMode) => {
+    setViewMode(nextMode);
+    if (nextMode !== "2d" && countryDraftCount) {
+      setCountryDraftCount(0);
+      setCountryCancelSignal((value) => value + 1);
+    }
+  };
+
   const addCity = (x, y) => {
     const cityName = window.prompt(
       cityType === "village" ? "Название поселения" : "Название города",
@@ -240,6 +334,7 @@ function MapBuilderEditor({ workId, settings }) {
         textures: [...current.textures, ...newTextures],
       }));
       setSelectedTextureId(newTextures[0].id);
+      setTool("brush");
       setStatusMessage(`Лист разделён на ${newTextures.length} текстур.`);
     } catch (uploadError) {
       setActionError(uploadError.message || "Не удалось импортировать лист текстур.");
@@ -301,13 +396,13 @@ function MapBuilderEditor({ workId, settings }) {
   const currentPreset = `${mapState.width}x${mapState.height}`;
 
   return (
-    <section className={styles.editor}>
+    <section className={styles.editor} ref={workspaceRef}>
       <header className={styles.header}>
         <div className={styles.heading}>
           <span className={styles.headingIcon}><Mountain size={17} /></span>
           <div>
             <h2>Мастерская карт</h2>
-            <p>Рисуйте мир свободными кистями, размещайте города и вращайте рельеф в 3D.</p>
+            <p>Свободное рисование, отдельные штампы, границы стран и поворотный 3D-рельеф.</p>
           </div>
         </div>
         <div className={styles.headerActions}>
@@ -333,7 +428,7 @@ function MapBuilderEditor({ workId, settings }) {
       </header>
 
       <div className={styles.toolbar}>
-        <div className={styles.toolGroup} role="group" aria-label="Инструменты свободного рисования">
+        <div className={styles.toolGroup} role="group" aria-label="Инструменты карты">
           <button type="button" className={`${styles.toolButton} ${tool === "brush" ? styles.active : ""}`} onClick={() => setTool("brush")}>
             <Brush size={14} /> Кисть
           </button>
@@ -343,15 +438,34 @@ function MapBuilderEditor({ workId, settings }) {
           <button type="button" className={`${styles.toolButton} ${tool === "erase" ? styles.active : ""}`} onClick={() => setTool("erase")}>
             <Eraser size={14} /> Ластик
           </button>
-          <button type="button" className={`${styles.toolButton} ${tool === "city" ? styles.active : ""}`} onClick={() => setTool("city")}>
-            <MapPinned size={14} /> Город
+          <button type="button" className={`${styles.toolButton} ${tool === "wall" ? styles.active : ""}`} onClick={() => setTool("wall")}>
+            <Mountain size={14} /> Стена
           </button>
+          <button type="button" className={`${styles.toolButton} ${tool === "city" ? styles.active : ""}`} onClick={() => setTool("city")}>
+            <MapPinned size={14} /> Метка
+          </button>
+          <button type="button" className={`${styles.toolButton} ${tool === "country" ? styles.active : ""}`} onClick={() => setTool("country")}>
+            <Globe2 size={14} /> Граница
+          </button>
+          <button type="button" className={`${styles.toolButton} ${tool === "select-country" ? styles.active : ""}`} onClick={() => setTool("select-country")}>
+            <MapPinned size={14} /> Выбрать страну
+          </button>
+          {selectedTexture?.placement && (
+            <button
+              type="button"
+              className={`${styles.toolButton} ${tool === selectedTexture.placement ? styles.active : ""}`}
+              onClick={() => setTool(selectedTexture.placement)}
+              title={selectedTexture.placement === "scatter" ? "Рассаживать деревья без наложения" : "Разместить один объект за щелчок"}
+            >
+              <MapPinned size={14} /> {selectedTexture.placement === "scatter" ? "Деревья" : "Один штамп"}
+            </button>
+          )}
         </div>
 
-        {(tool === "brush" || tool === "erase") && (
+        {(tool === "brush" || tool === "erase" || tool === "wall") && (
           <div className={styles.brushControls}>
             <label className={styles.brushControl}>
-              <span>Кисть <b>{Math.round(brushSize * mapState.height)} px</b></span>
+              <span>{tool === "wall" ? "Толщина стены" : "Размер кисти"} <b>{Math.round(brushSize * mapState.height)} px</b></span>
               <input
                 type="range"
                 min="0.005"
@@ -362,7 +476,7 @@ function MapBuilderEditor({ workId, settings }) {
                 aria-label="Размер кисти"
               />
             </label>
-            {tool === "brush" && (
+            {(tool === "brush" || tool === "wall") && (
               <label className={styles.brushControl}>
                 <span>Непрозрачность <b>{Math.round(brushOpacity * 100)}%</b></span>
                 <input
@@ -390,6 +504,53 @@ function MapBuilderEditor({ workId, settings }) {
           </label>
         )}
 
+        {(tool === "stamp" || tool === "scatter") && (
+          <label className={styles.brushControl}>
+            <span>{tool === "scatter" ? "Размер дерева" : "Размер штампа"} <b>{Math.round(stampSize * mapState.height)} px</b></span>
+            <input
+              type="range"
+              min="0.035"
+              max="0.38"
+              step="0.005"
+              value={stampSize}
+              onChange={(event) => setStampSize(Number(event.target.value))}
+              aria-label="Размер штампа"
+            />
+          </label>
+        )}
+
+        {tool === "country" && viewMode === "2d" && (
+          <div className={styles.countryControls}>
+            <label>
+              Название
+              <input maxLength={80} value={countryName} onChange={(event) => setCountryName(event.target.value)} />
+            </label>
+            <label className={styles.countryColorControl} title="Цвет границы">
+              <input type="color" value={countryColor} onChange={(event) => setCountryColor(event.target.value)} aria-label="Цвет страны" />
+            </label>
+            <span>{countryDraftCount} точек · щёлкните по карте, затем Enter</span>
+            <button
+              className={styles.finishCountryButton}
+              type="button"
+              disabled={countryDraftCount < 3}
+              onClick={() => setCountryFinishSignal((value) => value + 1)}
+            >
+              Завершить
+            </button>
+            <button
+              className={styles.cancelCountryButton}
+              type="button"
+              disabled={!countryDraftCount}
+              onClick={() => setCountryCancelSignal((value) => value + 1)}
+            >
+              Отмена
+            </button>
+          </div>
+        )}
+        {tool === "country" && viewMode === "3d" && (
+          <span className={styles.countryHint}>Создание границ доступно в режиме 2D.</span>
+        )}
+
         <label className={styles.selectWrap}>
           Холст
           <select value={currentPreset} onChange={selectSize}>
@@ -404,10 +565,10 @@ function MapBuilderEditor({ workId, settings }) {
 
         <span className={styles.toolbarSpacer} />
         <div className={styles.viewSwitch} role="group" aria-label="Режим просмотра">
-          <button type="button" className={viewMode === "2d" ? styles.viewActive : ""} onClick={() => setViewMode("2d")}>
+          <button type="button" className={viewMode === "2d" ? styles.viewActive : ""} onClick={() => changeViewMode("2d")}>
             <Layers size={14} /> 2D
           </button>
-          <button type="button" className={viewMode === "3d" ? styles.viewActive : ""} onClick={() => setViewMode("3d")}>
+          <button type="button" className={viewMode === "3d" ? styles.viewActive : ""} onClick={() => changeViewMode("3d")}>
             <Globe2 size={14} /> 3D
           </button>
         </div>
@@ -418,6 +579,16 @@ function MapBuilderEditor({ workId, settings }) {
             <button type="button" onClick={() => setZoom((value) => Math.min(1.7, value + 0.1))} aria-label="Увеличить масштаб"><Plus size={13} /></button>
           </div>
         )}
+        <button
+          type="button"
+          className={`${styles.toolButton} ${styles.fullscreenButton}`}
+          onClick={toggleFullscreen}
+          aria-pressed={isFullscreen}
+          title={isFullscreen ? "Выйти из полноэкранного режима" : "Развернуть рабочее пространство"}
+        >
+          {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          {isFullscreen ? "Свернуть" : "На весь экран"}
+        </button>
       </div>
 
       {(actionError || statusMessage) && (
@@ -445,9 +616,18 @@ function MapBuilderEditor({ workId, settings }) {
                 selectedTextureId={selectedTextureId}
                 brushSize={brushSize}
                 brushOpacity={brushOpacity}
+                stampSize={stampSize}
+                selectedCountryId={selectedCountryId}
+                countryFinishSignal={countryFinishSignal}
+                countryCancelSignal={countryCancelSignal}
                 onStrokeComplete={addStroke}
                 onPlaceCity={addCity}
                 onSetBaseTexture={setBaseTexture}
+                onStampPlace={addStamp}
+                onStampsComplete={addStamps}
+                onCountryComplete={addCountry}
+                onCountryDraftChange={setCountryDraftCount}
+                onSelectCountry={setSelectedCountryId}
               />
             ) : (
               <Suspense fallback={<div className={styles.status}>Загружаем 3D-сцену…</div>}>
@@ -457,8 +637,8 @@ function MapBuilderEditor({ workId, settings }) {
           </div>
           <div className={styles.mapFooter}>
             <span>{mapState.width} × {mapState.height} px</span>
-            <span>{mapState.strokes.length} мазков · {mapState.cities.length} городов и поселений</span>
-            <span><CircleHelp size={13} /> Рисуйте, удерживая кнопку мыши; в 3D тяните для вращения</span>
+            <span>{mapState.strokes.length} мазков · {(mapState.stamps || []).length} объектов · {(mapState.countries || []).length} стран · {mapState.cities.length} меток</span>
+            <span><CircleHelp size={13} /> Кисть и стены — протяжка · города/замки — один щелчок · деревья — протяжка без наложений · границы — точки, затем Enter · 3D — тяните для вращения</span>
           </div>
         </main>
 
@@ -475,7 +655,7 @@ function MapBuilderEditor({ workId, settings }) {
                 key={texture.id}
                 type="button"
                 className={`${styles.textureButton} ${selectedTextureId === texture.id ? styles.textureSelected : ""}`}
-                onClick={() => setSelectedTextureId(texture.id)}
+                onClick={() => selectTexture(texture)}
                 title={texture.label}
                 aria-pressed={selectedTextureId === texture.id}
               >
@@ -483,7 +663,10 @@ function MapBuilderEditor({ workId, settings }) {
                   className={styles.textureThumb}
                   style={{
                     backgroundImage: `url("${texture.src}")`,
-                    backgroundSize: texture.sourceType === "sheet" ? `${texture.cols * 100}% ${texture.rows * 100}%` : "cover",
+                    backgroundSize: texture.sourceType === "sheet"
+                      ? `${texture.cols * 100}% ${texture.rows * 100}%`
+                      : texture.placement ? "contain" : "cover",
+                    backgroundColor: texture.placement ? "#18201b" : undefined,
                     backgroundPosition: texture.sourceType === "sheet"
                       ? `${texture.cols > 1 ? (texture.col / (texture.cols - 1)) * 100 : 0}% ${texture.rows > 1 ? (texture.row / (texture.rows - 1)) * 100 : 0}%`
                       : "center",
@@ -537,6 +720,48 @@ function MapBuilderEditor({ workId, settings }) {
               onChange={importSpriteSheet}
               aria-label="Импортировать лист текстур"
             />
+          </div>
+
+          <div className={styles.cityList}>
+            <h4><Globe2 size={13} /> Страны <span>{(mapState.countries || []).length}</span></h4>
+            {(mapState.countries || []).length ? (
+              <ul>
+                {mapState.countries.map((country) => (
+                  <li key={country.id}>
+                    <button
+                      type="button"
+                      className={`${styles.countrySelectButton} ${selectedCountryId === country.id ? styles.countrySelected : ""}`}
+                      onClick={() => setSelectedCountryId(country.id)}
+                      aria-pressed={selectedCountryId === country.id}
+                    >
+                      <span className={styles.countrySwatch} style={{ backgroundColor: country.color }} />
+                      <span className={styles.cityName}>{country.name}</span>
+                    </button>
+                    <button type="button" onClick={() => deleteCountry(country.id)} aria-label={`Удалить страну ${country.name}`}>×</button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Выберите «Граница», задайте название и отметьте точки контура.</p>
+            )}
+          </div>
+
+          <div className={styles.cityList}>
+            <h4><MapPinned size={13} /> Объекты <span>{(mapState.stamps || []).length}</span></h4>
+            {(mapState.stamps || []).length ? (
+              <ul>
+                {[...(mapState.stamps || [])].slice(-12).reverse().map((stamp) => (
+                  <li key={stamp.id}>
+                    <span className={styles.stampDot}>◆</span>
+                    <span className={styles.cityName}>{textures.find((texture) => texture.id === stamp.textureId)?.label || stamp.textureId}</span>
+                    <small>{Math.round(stamp.x * 100)}%, {Math.round(stamp.y * 100)}%</small>
+                    <button type="button" onClick={() => deleteStamp(stamp.id)} aria-label={`Удалить объект ${stamp.id}`}>×</button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Города, замки и деревья появятся здесь после размещения на карте.</p>
+            )}
           </div>
 
           <div className={styles.cityList}>

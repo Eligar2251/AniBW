@@ -5,7 +5,7 @@ const FALLBACK_COLORS = {
   лес: "#31523b",
   горы: "#77766e",
   город: "#9a7046",
-  земля: "#61824d",
+  земля: "#61824b",
 };
 
 function sourceCrop(image, texture) {
@@ -50,36 +50,45 @@ function makeTexturePattern(context, texture, image, scale) {
   return pattern;
 }
 
-function drawStrokePath(context, points, width, height, lineWidth) {
-  const pixels = points.map((point) => ({ x: point.x * width, y: point.y * height }));
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.lineWidth = lineWidth;
-  context.beginPath();
+function toPixels(points, width, height) {
+  return points.map((point) => ({ x: point.x * width, y: point.y * height }));
+}
 
+function traceSmoothPath(context, points, width, height, close = false) {
+  const pixels = toPixels(points, width, height);
+  context.beginPath();
+  if (pixels.length === 0) return pixels;
   if (pixels.length === 1) {
-    context.arc(pixels[0].x, pixels[0].y, Math.max(1, lineWidth / 2), 0, Math.PI * 2);
-    return "dot";
+    context.arc(pixels[0].x, pixels[0].y, 1, 0, Math.PI * 2);
+    return pixels;
+  }
+
+  if (close && pixels.length > 2) {
+    const first = pixels[0];
+    const last = pixels[pixels.length - 1];
+    context.moveTo((first.x + last.x) / 2, (first.y + last.y) / 2);
+    for (let index = 0; index < pixels.length; index += 1) {
+      const current = pixels[index];
+      const next = pixels[(index + 1) % pixels.length];
+      context.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+    }
+    context.closePath();
+    return pixels;
   }
 
   context.moveTo(pixels[0].x, pixels[0].y);
   if (pixels.length === 2) {
     context.lineTo(pixels[1].x, pixels[1].y);
-  } else {
-    for (let index = 1; index < pixels.length - 1; index += 1) {
-      const current = pixels[index];
-      const next = pixels[index + 1];
-      context.quadraticCurveTo(
-        current.x,
-        current.y,
-        (current.x + next.x) / 2,
-        (current.y + next.y) / 2,
-      );
-    }
-    const last = pixels[pixels.length - 1];
-    context.lineTo(last.x, last.y);
+    return pixels;
   }
-  return "line";
+  for (let index = 1; index < pixels.length - 1; index += 1) {
+    const current = pixels[index];
+    const next = pixels[index + 1];
+    context.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+  }
+  const last = pixels[pixels.length - 1];
+  context.lineTo(last.x, last.y);
+  return pixels;
 }
 
 function getPattern(context, textureId, mapState, images, cache, scale) {
@@ -91,9 +100,54 @@ function getPattern(context, textureId, mapState, images, cache, scale) {
   return cache.get(key) || null;
 }
 
-export function paintBrushSegment(context, mapState, images, stroke, from, to, cache) {
+function drawWallPath(context, points, width, height, lineWidth) {
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  traceSmoothPath(context, points, width, height);
+  context.strokeStyle = "#342d25";
+  context.lineWidth = lineWidth * 1.22;
+  context.stroke();
+  context.strokeStyle = "#8e8069";
+  context.lineWidth = lineWidth * 0.88;
+  context.stroke();
+  context.setLineDash([Math.max(5, lineWidth * 0.48), Math.max(2, lineWidth * 0.1)]);
+  context.lineDashOffset = 0;
+  context.strokeStyle = "#c2b28e";
+  context.lineWidth = Math.max(2, lineWidth * 0.18);
+  context.stroke();
+  context.restore();
+}
+
+export function paintWallSegment(context, mapState, stroke, from, to) {
   const points = from.x === to.x && from.y === to.y ? [from] : [from, to];
-  const brush = getPattern(
+  context.save();
+  context.globalAlpha = Math.min(1, Math.max(0.1, Number(stroke.opacity) || 1));
+  drawWallPath(context, points, mapState.width, mapState.height, Math.max(8, stroke.size * mapState.height));
+  context.restore();
+}
+
+export function paintCountryPreviewSegment(context, mapState, from, to) {
+  context.save();
+  context.beginPath();
+  context.moveTo(from.x * mapState.width, from.y * mapState.height);
+  context.lineTo(to.x * mapState.width, to.y * mapState.height);
+  context.strokeStyle = "rgba(255, 222, 137, 0.95)";
+  context.lineWidth = Math.max(3, mapState.height * 0.0035);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.setLineDash([10, 6]);
+  context.stroke();
+  context.restore();
+}
+
+export function paintBrushSegment(context, mapState, images, stroke, from, to, cache) {
+  if (stroke.kind === "wall") {
+    paintWallSegment(context, mapState, stroke, from, to);
+    return;
+  }
+  const points = from.x === to.x && from.y === to.y ? [from] : [from, to];
+  const pattern = getPattern(
     context,
     stroke.erase ? mapState.baseTextureId : stroke.textureId,
     mapState,
@@ -104,15 +158,101 @@ export function paintBrushSegment(context, mapState, images, stroke, from, to, c
   const lineWidth = Math.max(2, (Number(stroke.size) || 0.05) * mapState.height);
   context.save();
   context.globalAlpha = stroke.erase ? 1 : Math.min(1, Math.max(0.05, Number(stroke.opacity) || 1));
-  context.fillStyle = brush || FALLBACK_COLORS.земля;
-  context.strokeStyle = brush || FALLBACK_COLORS.земля;
-  const kind = drawStrokePath(context, points, mapState.width, mapState.height, lineWidth);
-  if (kind === "dot") context.fill();
-  else context.stroke();
+  context.fillStyle = pattern || FALLBACK_COLORS.земля;
+  context.strokeStyle = pattern || FALLBACK_COLORS.земля;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.lineWidth = lineWidth;
+  context.beginPath();
+  if (points.length === 1) {
+    context.arc(points[0].x * mapState.width, points[0].y * mapState.height, Math.max(1, lineWidth / 2), 0, Math.PI * 2);
+    context.fill();
+  } else {
+    context.moveTo(points[0].x * mapState.width, points[0].y * mapState.height);
+    context.lineTo(points[1].x * mapState.width, points[1].y * mapState.height);
+    context.stroke();
+  }
   context.restore();
 }
 
-export function renderMapCanvas(context, mapState, images, includeCities = true) {
+export function drawMapStamp(context, mapState, images, stamp) {
+  const texture = getMapTexture(stamp.textureId, mapState.textures || []);
+  const image = images?.[texture.src];
+  if (!image?.naturalWidth) return;
+  const [sx, sy, sw, sh] = sourceCrop(image, texture);
+  const targetHeight = Math.max(10, (Number(stamp.size) || texture.defaultSize || 0.08) * mapState.height);
+  const targetWidth = targetHeight * sw / sh;
+  const centerX = stamp.x * mapState.width;
+  const centerY = stamp.y * mapState.height;
+  context.save();
+  context.globalAlpha = Math.min(1, Math.max(0.05, Number(stamp.opacity) || 1));
+  context.translate(centerX, centerY);
+  context.rotate(((Number(stamp.rotation) || 0) * Math.PI) / 180);
+  context.drawImage(image, sx, sy, sw, sh, -targetWidth / 2, -targetHeight / 2, targetWidth, targetHeight);
+  context.restore();
+}
+
+function drawCountry(context, mapState, country, selected) {
+  const { width, height } = mapState;
+  context.save();
+  traceSmoothPath(context, country.points, width, height, true);
+  context.fillStyle = country.color;
+  context.globalAlpha = selected ? 0.2 : 0.09;
+  context.fill();
+  context.globalAlpha = 1;
+  context.strokeStyle = country.color;
+  context.lineWidth = Math.max(3, height * (selected ? 0.006 : 0.0032));
+  context.setLineDash(selected ? [] : [12, 7]);
+  if (selected) {
+    context.shadowColor = country.color;
+    context.shadowBlur = 12;
+  }
+  context.stroke();
+  context.setLineDash([]);
+  context.shadowBlur = 0;
+
+  const center = country.points.reduce(
+    (total, point) => ({ x: total.x + point.x / country.points.length, y: total.y + point.y / country.points.length }),
+    { x: 0, y: 0 },
+  );
+  const label = country.name;
+  const x = center.x * width;
+  const y = center.y * height;
+  context.font = `700 ${Math.max(15, Math.min(width, height) * 0.027)}px sans-serif`;
+  const labelWidth = context.measureText(label).width + 22;
+  const labelHeight = Math.max(28, Math.min(width, height) * 0.052);
+  context.fillStyle = "rgba(13, 15, 19, 0.82)";
+  context.strokeStyle = country.color;
+  context.lineWidth = selected ? 2.5 : 1.4;
+  context.beginPath();
+  context.roundRect(x - labelWidth / 2, y - labelHeight / 2, labelWidth, labelHeight, 9);
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#fff1d0";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(label, x, y, labelWidth - 12);
+  context.restore();
+}
+
+export function findCountryAtPoint(countries, point) {
+  if (!Array.isArray(countries) || !point) return null;
+  for (let index = countries.length - 1; index >= 0; index -= 1) {
+    const country = countries[index];
+    let inside = false;
+    for (let i = 0, j = country.points.length - 1; i < country.points.length; j = i, i += 1) {
+      const a = country.points[i];
+      const b = country.points[j];
+      const crosses = ((a.y > point.y) !== (b.y > point.y)) &&
+        (point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y || 0.000001) + a.x);
+      if (crosses) inside = !inside;
+    }
+    if (inside) return country.id;
+  }
+  return null;
+}
+
+export function renderMapCanvas(context, mapState, images, includeCities = true, selectedCountryId = null) {
   const { width, height } = mapState;
   const patternCache = new Map();
   const basePattern = getPattern(context, mapState.baseTextureId, mapState, images, patternCache, 0.66);
@@ -123,6 +263,13 @@ export function renderMapCanvas(context, mapState, images, includeCities = true)
   context.restore();
 
   for (const stroke of mapState.strokes) {
+    if (stroke.kind === "wall") {
+      context.save();
+      context.globalAlpha = Math.min(1, Math.max(0.1, Number(stroke.opacity) || 1));
+      drawWallPath(context, stroke.points, width, height, Math.max(8, stroke.size * height));
+      context.restore();
+      continue;
+    }
     const pattern = getPattern(
       context,
       stroke.erase ? mapState.baseTextureId : stroke.textureId,
@@ -136,12 +283,24 @@ export function renderMapCanvas(context, mapState, images, includeCities = true)
     context.globalAlpha = stroke.erase ? 1 : Math.min(1, Math.max(0.05, Number(stroke.opacity) || 1));
     context.fillStyle = pattern || FALLBACK_COLORS.земля;
     context.strokeStyle = pattern || FALLBACK_COLORS.земля;
-    const kind = drawStrokePath(context, stroke.points, width, height, lineWidth);
-    if (kind === "dot") context.fill();
-    else context.stroke();
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = lineWidth;
+    context.beginPath();
+    if (stroke.points.length === 1) {
+      context.arc(stroke.points[0].x * width, stroke.points[0].y * height, Math.max(1, lineWidth / 2), 0, Math.PI * 2);
+      context.fill();
+    } else {
+      traceSmoothPath(context, stroke.points, width, height);
+      context.stroke();
+    }
     context.restore();
   }
 
+  for (const stamp of mapState.stamps || []) drawMapStamp(context, mapState, images, stamp);
+  for (const country of mapState.countries || []) {
+    drawCountry(context, mapState, country, country.id === selectedCountryId);
+  }
   if (includeCities) mapState.cities.forEach((city) => drawCity(context, city, width, height));
 }
 
@@ -161,10 +320,45 @@ export function renderHeightMap(context, mapState) {
     context.globalAlpha = stroke.erase ? 1 : Math.min(1, Math.max(0.05, Number(stroke.opacity) || 1));
     context.strokeStyle = `rgb(${gray}, ${gray}, ${gray})`;
     context.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
-    const kind = drawStrokePath(context, stroke.points, width, height, Math.max(2, stroke.size * height));
-    if (kind === "dot") context.fill();
-    else context.stroke();
+    if (stroke.kind === "wall") {
+      const wallGray = toGray(0.42);
+      context.strokeStyle = `rgb(${wallGray}, ${wallGray}, ${wallGray})`;
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.lineWidth = Math.max(4, stroke.size * height * 0.78);
+      traceSmoothPath(context, stroke.points, width, height);
+      context.stroke();
+    } else {
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.lineWidth = Math.max(2, stroke.size * height);
+      context.beginPath();
+      if (stroke.points.length === 1) {
+        context.arc(stroke.points[0].x * width, stroke.points[0].y * height, Math.max(1, stroke.size * height / 2), 0, Math.PI * 2);
+        context.fill();
+      } else {
+        traceSmoothPath(context, stroke.points, width, height);
+        context.stroke();
+      }
+    }
     context.restore();
+  }
+
+  for (const stamp of mapState.stamps || []) {
+    const texture = getMapTexture(stamp.textureId, mapState.textures || []);
+    const gray = toGray(Number(texture.elevation) || 0.2);
+    context.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
+    context.beginPath();
+    context.ellipse(
+      stamp.x * width,
+      stamp.y * height,
+      Math.max(2, stamp.size * height * 0.45),
+      Math.max(2, stamp.size * height * 0.4),
+      0,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
   }
 }
 

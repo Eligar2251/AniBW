@@ -97,7 +97,10 @@ function usePublicWorldAvailability(workId) {
         (entriesResult.count || 0) > 0 ||
         (markersResult.count || 0) > 0 ||
         Boolean(mapResult.data?.background_url) ||
-        (mapResult.data?.map_state?.tiles?.length || 0) > 0
+        (mapResult.data?.map_state?.tiles?.length || 0) > 0 ||
+        (mapResult.data?.map_state?.strokes?.length || 0) > 0 ||
+        (mapResult.data?.map_state?.stamps?.length || 0) > 0 ||
+        (mapResult.data?.map_state?.countries?.length || 0) > 0
       );
     },
     enabled: !!workId,
