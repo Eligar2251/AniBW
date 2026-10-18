@@ -1,0 +1,322 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: relative;
+}
+
+.canvas {
+  position: relative;
+  min-height: 480px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg-raised);
+  background-image:
+    linear-gradient(rgba(240, 237, 232, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 237, 232, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse at center, rgba(232, 53, 74, 0.06), transparent 68%);
+  background-size: 48px 48px, 48px 48px, cover;
+  isolation: isolate;
+}
+
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.82;
+}
+
+.marker {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  transform: translate(-50%, -100%);
+  color: var(--marker-color);
+  cursor: pointer;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.75));
+  transition: transform var(--dur-fast), filter var(--dur-fast);
+}
+
+.marker:hover,
+.markerActive {
+  z-index: 3;
+  transform: translate(-50%, -100%) scale(1.14);
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--marker-color) 55%, transparent));
+}
+
+.markerLabel {
+  max-width: 180px;
+  padding: 3px 7px;
+  border: 1px solid rgba(240, 237, 232, 0.12);
+  border-radius: 999px;
+  background: rgba(10, 11, 18, 0.86);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.hint {
+  position: absolute;
+  bottom: var(--space-4);
+  left: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: rgba(10, 11, 18, 0.82);
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.infoCard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-raised);
+}
+
+.infoMain {
+  min-width: 0;
+}
+
+.infoTitle {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.infoText {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.infoMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.entryLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--color-accent);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.entryLink:hover {
+  color: var(--color-text-primary);
+}
+
+.empty,
+.loading,
+.error {
+  padding: var(--space-8);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  background: var(--color-bg-raised);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.error {
+  color: var(--color-error);
+}
+
+.viewControls {
+  display: flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-raised);
+}
+
+.viewControls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  padding: 0 11px;
+  color: var(--color-text-muted);
+  border-radius: 5px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.viewControls button:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.viewControls button.viewActive {
+  color: #f2dfbb;
+  background: rgba(185, 124, 48, 0.18);
+}
+
+.terrainViewport {
+  max-height: 620px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: #0c1210;
+  overscroll-behavior: contain;
+}
+
+.terrainPlane {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.terrainPlane :global(.world-map-canvas) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+.terrain3d {
+  height: 540px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: #0b1012;
+}
+
+.terrain3d :global(.world-map-3d-canvas) {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.terrain3d :global(.world-map-3d-stage) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.terrain3d :global(.world-map-3d-canvas canvas) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.terrain3d :global(.world-map-3d-hint) {
+  position: absolute;
+  z-index: 2;
+  bottom: 10px;
+  left: 12px;
+  padding: 6px 9px;
+  color: rgba(239, 231, 208, 0.73);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: rgba(8, 11, 13, 0.72);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.terrain3d :global(.world-map-3d-loading) {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.terrain3d :global(.world-map-3d-loading[hidden]) {
+  display: none;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.error button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  background: var(--color-bg);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .canvas {
+    min-height: 360px;
+  }
+
+  .terrainViewport {
+    max-height: 500px;
+    padding: 7px;
+  }
+
+  .terrain3d {
+    height: 400px;
+  }
+
+  .infoCard {
+    flex-direction: column;
+  }
+
+  .infoMeta {
+    white-space: normal;
+  }
+
+  .markerLabel {
+    max-width: 120px;
+  }
+}

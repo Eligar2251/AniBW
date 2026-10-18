@@ -14,12 +14,15 @@ function useRecentUpdates() {
   return useQuery({
     queryKey: ["recent-updates"],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("works_full")
         .select("*")
+        .eq("visibility", "public")
+        .neq("status", "draft")
         .order("last_chapter_at", { ascending: false })
         .not("last_chapter_at", "is", null)
         .limit(8);
+      if (error) throw error;
       return data || [];
     },
     staleTime: 1000 * 60 * 3,

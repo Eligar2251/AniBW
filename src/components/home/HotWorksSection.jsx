@@ -12,11 +12,14 @@ function useHotWorks() {
   return useQuery({
     queryKey: ["hot-works"],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("works_full")
         .select("*")
+        .eq("visibility", "public")
+        .neq("status", "draft")
         .order("views_count", { ascending: false })
         .limit(10);
+      if (error) throw error;
       return data || [];
     },
     staleTime: 1000 * 60 * 5,

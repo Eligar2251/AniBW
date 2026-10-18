@@ -23,7 +23,7 @@ import {
 import { supabase } from "@lib/supabase";
 import { useAuthStore } from "@store/authStore";
 import { getCloudinaryUrl, transforms } from "@lib/cloudinary";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import styles from "./DashboardHome.module.css";
 
@@ -32,7 +32,7 @@ function useDashboardData() {
   return useQuery({
     queryKey: ["dashboard", user?.id],
     queryFn: async () => {
-      const [worksRes, statsRes] = await Promise.all([
+      const [worksRes, statsRes, activityRes] = await Promise.all([
         supabase
           .from("works")
           .select(
@@ -45,32 +45,39 @@ function useDashboardData() {
           p_author_id: user.id,
           p_period: "month",
         }),
+        supabase.rpc("get_author_activity", {
+          p_author_id: user.id,
+          p_days: 14,
+        }),
       ]);
+
+      if (worksRes.error) throw worksRes.error;
+      if (statsRes.error) throw statsRes.error;
+      if (activityRes.error) throw activityRes.error;
+
       return {
         works: worksRes.data || [],
         stats: statsRes.data?.[0] || {},
+        activity: (activityRes.data || []).map((day) => ({
+          date: format(new Date(`${day.activity_date}T00:00:00`), "d MMM", {
+            locale: ru,
+          }),
+          views: Number(day.views) || 0,
+          likes: Number(day.likes) || 0,
+        })),
       };
     },
     enabled: !!user,
   });
 }
 
-function generateChartData() {
-  return Array.from({ length: 14 }, (_, i) => ({
-    date: format(subDays(new Date(), 13 - i), "d MMM", { locale: ru }),
-    views: Math.floor(Math.random() * 500 + 100),
-    likes: Math.floor(Math.random() * 50 + 5),
-  }));
-}
-
-const chartData = generateChartData();
-
 export default function DashboardHome() {
   const profile = useAuthStore((s) => s.profile);
-  const { data, isLoading } = useDashboardData();
+  const { data, isLoading, error } = useDashboardData();
 
   const stats = data?.stats || {};
   const works = data?.works || [];
+  const chartData = data?.activity || [];
 
   const STAT_CARDS = [
     {
@@ -145,7 +152,7 @@ export default function DashboardHome() {
                 </div>
                 <div className={styles.statContent}>
                   <span className={styles.statValue}>
-                    {isLoading ? "—" : formatNum(value || 0)}
+                    {isLoading || error ? "—" : formatNum(value || 0)}
                   </span>
                   <span className={styles.statLabel}>{label}</span>
                 </div>
@@ -181,6 +188,11 @@ export default function DashboardHome() {
               </div>
             </div>
 
+            {error && (
+              <p className={styles.chartSub} role="alert">
+                Не удалось загрузить аналитику. Попробуйте обновить страницу.
+              </p>
+            )}
             <ResponsiveContainer width="100%" height={180}>
               <AreaChart
                 data={chartData}

@@ -1,5 +1,5 @@
 // src/pages/dashboard/WorldBoardPage.jsx
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,25 +8,33 @@ import {
   Clock,
   StickyNote,
   BookMarked,
+  BookOpen,
   Map,
   GitBranch,
   Trash2,
   Save,
   X,
   Layout,
+  ExternalLink,
+  RotateCcw,
+  Mountain,
 } from "lucide-react";
 import { supabase } from "@lib/supabase";
 import { useAuthStore } from "@store/authStore";
 import WorldMap from "./board/WorldMap";
 import CharacterGraph from "./board/CharacterGraph";
 import FreeCanvas from "./board/FreeCanvas";
+import WorldCodex from "@components/worldbuilding/WorldCodex";
+import WorldMapBuilder from "@components/worldbuilding/WorldMapBuilder";
 import styles from "./WorldBoardPage.module.css";
 
 const TABS = [
   { id: "timeline", icon: Clock, label: "Таймлайн", dbType: "timeline_event" },
   { id: "notes", icon: StickyNote, label: "Заметки", dbType: "note" },
   { id: "lore", icon: BookMarked, label: "Лор", dbType: "lore_page" },
-  { id: "map", icon: Map, label: "Карта", dbType: null },
+  { id: "codex", icon: BookOpen, label: "Кодекс", dbType: null },
+  { id: "terrain", icon: Mountain, label: "Карта 2D/3D", dbType: null },
+  { id: "map", icon: Map, label: "Метки", dbType: null },
   { id: "graph", icon: GitBranch, label: "Связи", dbType: null },
   { id: "canvas", icon: Layout, label: "Канвас", dbType: null },
 ];
@@ -35,11 +43,12 @@ function useWork(id) {
   return useQuery({
     queryKey: ["board-work", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("works")
         .select("id, title")
         .eq("id", id)
         .single();
+      if (error) throw error;
       return data;
     },
     enabled: !!id,
@@ -71,10 +80,17 @@ export default function WorldBoardPage() {
   const [activeTab, setActiveTab] = useState("timeline");
   const [actionError, setActionError] = useState("");
 
-  const { data: work } = useWork(workId);
+  const {
+    data: work,
+    error: workError,
+  } = useWork(workId);
   const currentTab = TABS.find((t) => t.id === activeTab);
   const dbType = currentTab?.dbType || null;
-  const { data: items = [], isLoading } = useBoardItems(workId, dbType);
+  const {
+    data: items = [],
+    isLoading,
+    error: itemsError,
+  } = useBoardItems(workId, dbType);
 
   const addItem = useMutation({
     mutationFn: async () => {
@@ -97,26 +113,34 @@ export default function WorldBoardPage() {
 
   const removeItem = useMutation({
     mutationFn: async (id) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("world_board_items")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Элемент не найден или у вас нет доступа к нему.");
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["board", workId] }),
+    onError: (err) => setActionError(err.message || "Не удалось удалить элемент."),
   });
 
   const updateItem = useMutation({
     mutationFn: async ({ id, ...fields }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("world_board_items")
         .update(fields)
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Элемент не найден или у вас нет доступа к нему.");
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["board", workId] }),
+    onError: (err) => setActionError(err.message || "Не удалось сохранить элемент."),
   });
 
   const isDataTab = !!dbType;
@@ -139,31 +163,55 @@ export default function WorldBoardPage() {
             {work && <p className={styles.subtitle}>{work.title}</p>}
           </div>
         </div>
-        {showAddBtn && (
-          <motion.button
-            className={styles.addBtn}
-            onClick={() => addItem.mutate()}
-            disabled={addItem.isPending}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            <Plus size={16} strokeWidth={1.5} />
-            Добавить
-          </motion.button>
-        )}
+        <div className={styles.headerActions}>
+          {(activeTab === "codex" || activeTab === "terrain" || activeTab === "map") && work && (
+            <Link
+              className={styles.previewBtn}
+              to={activeTab === "codex" ? `/works/${work.id}/world` : `/works/${work.id}/world?view=map`}
+            >
+              <ExternalLink size={14} strokeWidth={1.5} />
+              Публичный вид
+            </Link>
+          )}
+          {showAddBtn && (
+            <motion.button
+              className={styles.addBtn}
+              onClick={() => addItem.mutate()}
+              disabled={addItem.isPending}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <Plus size={16} strokeWidth={1.5} />
+              Добавить
+            </motion.button>
+          )}
+        </div>
       </motion.div>
 
       <AnimatePresence>
-        {actionError && (
+        {(actionError || workError || itemsError) && (
           <motion.div
             className={styles.errorBanner}
+            role="alert"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
           >
-            <span>{actionError}</span>
-            <button onClick={() => setActionError("")}>
-              <X size={14} />
+            <span>{actionError || workError?.message || itemsError?.message}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setActionError("");
+                if (workError) {
+                  queryClient.refetchQueries({ queryKey: ["board-work", workId] });
+                }
+                if (itemsError && dbType) {
+                  queryClient.refetchQueries({ queryKey: ["board", workId, dbType] });
+                }
+              }}
+              aria-label={workError || itemsError ? "Повторить загрузку" : "Закрыть сообщение"}
+            >
+              {workError || itemsError ? <RotateCcw size={14} /> : <X size={14} />}
             </button>
           </motion.div>
         )}
@@ -220,6 +268,8 @@ export default function WorldBoardPage() {
               onRemove={(id) => removeItem.mutate(id)}
             />
           )}
+          {activeTab === "codex" && <WorldCodex workId={workId} />}
+          {activeTab === "terrain" && <WorldMapBuilder workId={workId} />}
           {activeTab === "map" && <WorldMap workId={workId} />}
           {activeTab === "graph" && <CharacterGraph workId={workId} />}
           {activeTab === "canvas" && <FreeCanvas workId={workId} />}

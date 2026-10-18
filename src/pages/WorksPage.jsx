@@ -17,11 +17,14 @@ function useWorks(sort = "popular") {
       };
       const order = orderMap[sort] || orderMap.popular;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("works_full")
         .select("*")
+        .eq("visibility", "public")
+        .neq("status", "draft")
         .order(order.column, { ascending: order.ascending })
         .limit(30);
+      if (error) throw error;
       return data || [];
     },
   });

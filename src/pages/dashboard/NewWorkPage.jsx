@@ -140,27 +140,37 @@ export default function NewWorkPage() {
 
       if (workErr) throw workErr;
 
-      // Добавляем теги
-      if (tags.length > 0) {
-        for (const tagName of tags) {
-          // upsert тега
-          const { data: tag, error: tagErr } = await supabase
-            .from("tags")
-            .upsert({ name: tagName }, { onConflict: "name" })
-            .select("id")
-            .single();
+      try {
+        if (tags.length > 0) {
+          for (const tagName of tags) {
+            const { error: tagInsertError } = await supabase
+              .from("tags")
+              .upsert(
+                { name: tagName },
+                { onConflict: "name", ignoreDuplicates: true },
+              );
+            if (tagInsertError) throw tagInsertError;
 
-          if (tagErr) {
-            console.warn("Tag upsert error:", tagErr.message);
-            continue;
+            const { data: tag, error: tagLoadError } = await supabase
+              .from("tags")
+              .select("id")
+              .eq("name", tagName)
+              .single();
+            if (tagLoadError) throw tagLoadError;
+
+            const { error: linkError } = await supabase
+              .from("work_tags")
+              .insert({ work_id: work.id, tag_id: tag.id });
+            if (linkError) throw linkError;
           }
-
-          // Привязываем тег к произведению
-          await supabase
-            .from("work_tags")
-            .insert({ work_id: work.id, tag_id: tag.id })
-            .throwOnError();
         }
+      } catch (tagError) {
+        const { error: cleanupError } = await supabase
+          .from("works")
+          .delete()
+          .eq("id", work.id);
+        if (cleanupError) console.error("Work cleanup failed:", cleanupError);
+        throw tagError;
       }
 
       return work;
@@ -424,6 +434,7 @@ export default function NewWorkPage() {
                 <input
                   type="text"
                   value={tagInput}
+                  maxLength={60}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === ",") {

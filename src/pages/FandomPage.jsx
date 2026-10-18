@@ -10,20 +10,22 @@ function useFandom(slug) {
   return useQuery({
     queryKey: ["fandom", slug],
     queryFn: async () => {
-      const { data: fandom } = await supabase
+      const { data: fandom, error: fandomError } = await supabase
         .from("fandoms")
         .select("*")
         .eq("slug", slug)
         .single();
+      if (fandomError) throw fandomError;
 
-      if (!fandom) throw new Error("Фандом не найден");
-
-      const { data: works } = await supabase
+      const { data: works, error: worksError } = await supabase
         .from("works_full")
         .select("*")
         .eq("fandom_id", fandom.id)
+        .eq("visibility", "public")
+        .neq("status", "draft")
         .order("views_count", { ascending: false })
         .limit(20);
+      if (worksError) throw worksError;
 
       return { fandom, works: works || [] };
     },
@@ -33,7 +35,7 @@ function useFandom(slug) {
 
 export default function FandomPage() {
   const { slug } = useParams();
-  const { data, isLoading } = useFandom(slug);
+  const { data, isLoading, error } = useFandom(slug);
 
   if (isLoading)
     return (
@@ -47,7 +49,20 @@ export default function FandomPage() {
       </div>
     );
 
-  const { fandom, works } = data || {};
+  if (error || !data) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.container}>
+          <div className={styles.empty}>
+            <span className={styles.emptyKanji}>無</span>
+            <p>Фандом не найден</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { fandom, works } = data;
 
   return (
     <div className={styles.page}>

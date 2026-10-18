@@ -8,24 +8,17 @@ import { supabase } from "@lib/supabase";
 import WorkCard from "@components/works/WorkCard";
 import styles from "./SearchPage.module.css";
 
-function useSearch(query) {
+function useSearch(query, tag, genre) {
   return useQuery({
-    queryKey: ["search", query],
+    queryKey: ["search", query, tag, genre],
     queryFn: async () => {
-      if (!query?.trim()) {
-        const { data } = await supabase
-          .from("works_full")
-          .select("*")
-          .order("views_count", { ascending: false })
-          .limit(24);
-        return data || [];
-      }
-
-      const { data } = await supabase
-        .from("works_full")
-        .select("*")
-        .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
-        .limit(24);
+      const { data, error } = await supabase.rpc("search_works", {
+        search_query_in: query.trim() || null,
+        tag_in: tag || null,
+        genre_in: genre || null,
+        result_limit: 24,
+      });
+      if (error) throw error;
       return data || [];
     },
     enabled: true,
@@ -36,14 +29,18 @@ export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputVal, setInputVal] = useState(searchParams.get("q") || "");
   const query = searchParams.get("q") || "";
+  const tag = searchParams.get("tag") || "";
+  const genre = searchParams.get("genre") || "";
 
-  const { data: results = [], isLoading } = useSearch(query);
+  const { data: results = [], isLoading, isError } = useSearch(query, tag, genre);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (inputVal.trim()) {
-      setSearchParams({ q: inputVal.trim() });
-    }
+    const nextParams = {};
+    if (inputVal.trim()) nextParams.q = inputVal.trim();
+    if (tag) nextParams.tag = tag;
+    if (genre) nextParams.genre = genre;
+    setSearchParams(nextParams);
   };
 
   return (
@@ -81,11 +78,13 @@ export default function SearchPage() {
             </div>
           </form>
 
-          {query && (
+          {(query || tag || genre) && (
             <p className={styles.resultCount}>
               {isLoading
                 ? "Ищем..."
-                : `Найдено: ${results.length} результатов по запросу «${query}»`}
+                : isError
+                  ? "Не удалось выполнить поиск. Попробуйте ещё раз."
+                  : `Найдено: ${results.length} результатов${query ? ` по запросу «${query}»` : ""}${tag ? ` · тег «${tag}»` : ""}${genre ? ` · жанр «${genre}»` : ""}`}
             </p>
           )}
         </motion.div>
@@ -102,10 +101,14 @@ export default function SearchPage() {
               ))}
         </div>
 
-        {!isLoading && results.length === 0 && query && (
+        {!isLoading && !isError && results.length === 0 && (query || tag || genre) && (
           <div className={styles.empty}>
             <span className={styles.emptyKanji}>無</span>
-            <p>Ничего не найдено по запросу «{query}»</p>
+            <p>
+              {query
+                ? `Ничего не найдено по запросу «${query}»`
+                : `По заданным фильтрам ничего не найдено${tag ? ` (тег: ${tag})` : ""}${genre ? ` (жанр: ${genre})` : ""}`}
+            </p>
           </div>
         )}
       </div>

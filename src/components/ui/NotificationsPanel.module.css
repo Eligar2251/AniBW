@@ -4,8 +4,8 @@
   position: absolute;
   top: calc(100% + 12px);
   right: 0;
-  width: 360px;
-  max-height: 480px;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(480px, calc(100vh - 32px));
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);

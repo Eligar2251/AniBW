@@ -13,7 +13,14 @@ export function useInfiniteWorks({ sort = "popular", fandomId, tags } = {}) {
         .select("*")
         .range(pageParam * PAGE_SIZE, (pageParam + 1) * PAGE_SIZE - 1);
 
+      query = query.eq("visibility", "public").neq("status", "draft");
       if (fandomId) query = query.eq("fandom_id", fandomId);
+      if (tags?.length) {
+        const normalizedTags = (Array.isArray(tags) ? tags : [tags]).map((tag) =>
+          String(tag).toLowerCase(),
+        );
+        query = query.contains("tags", normalizedTags);
+      }
 
       const orderMap = {
         popular: { column: "views_count", ascending: false },

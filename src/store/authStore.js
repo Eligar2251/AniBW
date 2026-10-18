@@ -3,6 +3,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { supabase } from "@lib/supabase";
 
+let initializePromise = null;
+
 // ── Утилита: загрузить профиль с ретраями ──
 const loadProfile = async (userId, maxAttempts = 5) => {
   for (let i = 1; i <= maxAttempts; i++) {
@@ -39,10 +41,14 @@ export const useAuthStore = create(
       initialized: false,
 
       setSession: (session) =>
-        set({
+        set((state) => ({
           session,
           user: session?.user ?? null,
-        }),
+          profile:
+            session?.user?.id && session.user.id === state.user?.id
+              ? state.profile
+              : null,
+        })),
 
       setProfile: (profile) => set({ profile }),
 
@@ -55,29 +61,44 @@ export const useAuthStore = create(
           return;
         }
 
-        set({ loading: true });
+        if (initializePromise) {
+          await initializePromise;
+          return;
+        }
+
+        initializePromise = (async () => {
+          set({ loading: true });
+
+          try {
+            const {
+              data: { session },
+              error,
+            } = await supabase.auth.getSession();
+
+            if (error) {
+              console.error("getSession error:", error.message);
+              return;
+            }
+
+            set({ session, user: session?.user ?? null, profile: null });
+
+            if (session?.user) {
+              const profile = await loadProfile(session.user.id);
+              set({ profile });
+            } else {
+              set({ profile: null });
+            }
+          } catch (err) {
+            console.error("initialize exception:", err);
+          } finally {
+            set({ loading: false, initialized: true });
+          }
+        })();
 
         try {
-          const {
-            data: { session },
-            error,
-          } = await supabase.auth.getSession();
-
-          if (error) {
-            console.error("getSession error:", error.message);
-            return;
-          }
-
-          set({ session, user: session?.user ?? null });
-
-          if (session?.user) {
-            const profile = await loadProfile(session.user.id);
-            set({ profile });
-          }
-        } catch (err) {
-          console.error("initialize exception:", err);
+          await initializePromise;
         } finally {
-          set({ loading: false, initialized: true });
+          initializePromise = null;
         }
       },
 

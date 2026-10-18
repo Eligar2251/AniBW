@@ -1,6 +1,7 @@
 // src/pages/ReaderPage.jsx
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import DOMPurify from "dompurify";
 import { useEffect, useRef, useCallback, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -20,37 +21,61 @@ import ReaderProgress from "@components/reader/ReaderProgress";
 import ChapterComments from "@components/reader/ChapterComments";
 import styles from "./ReaderPage.module.css";
 
-function useChapter(chapterId) {
+function useChapter(chapterId, workId) {
   return useQuery({
-    queryKey: ["chapter", chapterId],
+    queryKey: ["chapter", workId, chapterId],
     queryFn: async () => {
-      if (chapterId === "first") return null;
-
-      const { data, error } = await supabase
+      let chapterQuery = supabase
         .from("chapters")
-        .select(
-          `
+        .select(`
           *,
           work:works(
             id, title, author_id,
             author:profiles(username, display_name),
             chapters_count
           )
-        `,
-        )
-        .eq("id", chapterId)
-        .single();
+        `);
 
+      if (chapterId === "first") {
+        chapterQuery = chapterQuery
+          .eq("work_id", workId)
+          .eq("status", "published")
+          .order("chapter_number", { ascending: true })
+          .limit(1);
+      } else {
+        chapterQuery = chapterQuery.eq("id", chapterId);
+      }
+
+      const { data, error } = await chapterQuery.maybeSingle();
       if (error) throw error;
+      if (!data) return null;
 
-      await supabase.rpc("increment_views", {
+      const { error: viewError } = await supabase.rpc("increment_views", {
         work_id_in: data.work_id,
         chapter_id_in: data.id,
       });
+      if (viewError) console.error("Could not record chapter view:", viewError);
 
       return data;
     },
-    enabled: !!chapterId,
+    enabled: !!chapterId && !!workId,
+  });
+}
+
+function useSavedProgress(userId, chapterId) {
+  return useQuery({
+    queryKey: ["chapter-progress", userId, chapterId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("chapter_progress")
+        .select("scroll_position")
+        .eq("user_id", userId)
+        .eq("chapter_id", chapterId)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? Number(data.scroll_position) : 0;
+    },
+    enabled: !!userId && !!chapterId,
   });
 }
 
@@ -64,7 +89,7 @@ function useAdjacentChapters(workId, chapterNumber) {
         .eq("work_id", workId)
         .eq("status", "published")
         .eq("chapter_number", chapterNumber - 1)
-        .single();
+        .maybeSingle();
 
       const { data: next } = await supabase
         .from("chapters")
@@ -72,7 +97,7 @@ function useAdjacentChapters(workId, chapterNumber) {
         .eq("work_id", workId)
         .eq("status", "published")
         .eq("chapter_number", chapterNumber + 1)
-        .single();
+        .maybeSingle();
 
       return { prev, next };
     },
@@ -111,13 +136,15 @@ export default function ReaderPage() {
     headerVisible,
   } = useReaderStore();
 
-  const { data: chapter, isLoading } = useChapter(chapterId);
+  const { data: chapter, isLoading } = useChapter(chapterId, workId);
   const { data: adjacent } = useAdjacentChapters(
     chapter?.work_id,
     chapter?.chapter_number,
   );
+  const { data: savedProgress } = useSavedProgress(user?.id, chapter?.id);
 
   const [progress, setProgress] = useState(0);
+  const progressRef = useRef(0);
 
   const themeVars = READER_THEMES[theme] || READER_THEMES.dark;
 
@@ -133,18 +160,40 @@ export default function ReaderPage() {
 
     // Прячем хедер при скролле вниз
     setHeaderVisible(scrolled < 80);
-  }, []);
+  }, [setHeaderVisible]);
 
   useEffect(() => {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+
+  useEffect(() => {
+    if (savedProgress === undefined || !chapter) return;
+
+    const frame = requestAnimationFrame(() => {
+      const maxScroll = Math.max(
+        document.documentElement.scrollHeight - window.innerHeight,
+        0,
+      );
+      if (maxScroll > 0 && savedProgress > 0) {
+        window.scrollTo({ top: maxScroll * savedProgress, behavior: "auto" });
+      } else {
+        handleScroll();
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [chapter, savedProgress, handleScroll]);
+
   // ── Сохранение прогресса ──
   const saveProgress = useMutation({
     mutationFn: async (scrollPos) => {
       if (!user || !chapter) return;
-      await supabase.from("chapter_progress").upsert(
+      const { error } = await supabase.from("chapter_progress").upsert(
         {
           user_id: user.id,
           work_id: chapter.work_id,
@@ -155,19 +204,23 @@ export default function ReaderPage() {
         },
         { onConflict: "user_id,chapter_id" },
       );
+      if (error) throw error;
     },
   });
 
   // Автосохранение каждые 10 секунд
+  const canSaveProgress = Boolean(user?.id && chapter?.id);
+  const mutateProgress = saveProgress.mutate;
   useEffect(() => {
-    const interval = setInterval(() => {
-      saveProgress.mutate(progress);
+    if (!canSaveProgress) return undefined;
+    const interval = window.setInterval(() => {
+      mutateProgress(progressRef.current);
     }, 10000);
-    return () => clearInterval(interval);
-  }, [progress]);
+    return () => window.clearInterval(interval);
+  }, [canSaveProgress, mutateProgress]);
 
   if (isLoading) return <ReaderSkeleton theme={themeVars} />;
-  if (!chapter) return null;
+  if (!chapter) return <Navigate to={`/works/${workId}`} replace />;
 
   const cssVars = {
     "--reader-bg": themeVars.bg,
@@ -209,9 +262,14 @@ export default function ReaderPage() {
             </div>
 
             <div className={styles.headerActions}>
-              <button className={styles.headerBtn} title="Список глав">
+              <Link
+                to={`/works/${workId}#chapters`}
+                className={styles.headerBtn}
+                title="Список глав"
+                aria-label="Перейти к списку глав"
+              >
                 <List size={16} strokeWidth={1.5} />
-              </button>
+              </Link>
               <button
                 className={styles.headerBtn}
                 onClick={() => setSettingsOpen(!settingsOpen)}
@@ -275,7 +333,9 @@ export default function ReaderPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.8 }}
-          dangerouslySetInnerHTML={{ __html: chapter.content }}
+          dangerouslySetInnerHTML={{
+            __html: DOMPurify.sanitize(chapter.content || ""),
+          }}
         />
 
         {/* Авторская заметка — конец */}
@@ -335,7 +395,7 @@ export default function ReaderPage() {
         </div>
 
         {/* Комментарии */}
-        <ChapterComments chapterId={chapterId} workId={workId} />
+        <ChapterComments chapterId={chapter.id} workId={workId} />
       </main>
     </div>
   );

@@ -1,4 +1,3 @@
-// src/hooks/useSearch.js
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@lib/supabase";
@@ -8,9 +7,9 @@ export function useSearch() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const timerRef = useRef(null);
 
-  const debouncedSetQuery = useCallback((val) => {
+  const debouncedSetQuery = useCallback((value) => {
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setDebouncedQuery(val), 400);
+    timerRef.current = setTimeout(() => setDebouncedQuery(value), 400);
   }, []);
 
   useEffect(() => {
@@ -21,21 +20,16 @@ export function useSearch() {
   const results = useQuery({
     queryKey: ["search-results", debouncedQuery],
     queryFn: async () => {
-      if (!debouncedQuery.trim()) return [];
-
-      const { data } = await supabase
-        .from("works_full")
-        .select("*")
-        .or(
-          `title.ilike.%${debouncedQuery}%,` +
-            `description.ilike.%${debouncedQuery}%,` +
-            `summary.ilike.%${debouncedQuery}%`,
-        )
-        .limit(20);
-
+      const { data, error } = await supabase.rpc("search_works", {
+        search_query_in: debouncedQuery.trim() || null,
+        tag_in: null,
+        genre_in: null,
+        result_limit: 20,
+      });
+      if (error) throw error;
       return data || [];
     },
-    enabled: debouncedQuery.length >= 2,
+    enabled: debouncedQuery.trim().length >= 2,
   });
 
   return { query, setQuery, results, debouncedQuery };

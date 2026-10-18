@@ -12,6 +12,7 @@ import {
   Bold,
   Italic,
   Copy,
+  X,
 } from "lucide-react";
 import { supabase } from "@lib/supabase";
 import { useAuthStore } from "@store/authStore";
@@ -35,7 +36,7 @@ const FONT_OPTIONS = [
   { label: "Body", value: "var(--font-body)" },
   { label: "Mono", value: "var(--font-mono)" },
   { label: "Japanese", value: "var(--font-japanese)" },
-  { label: "Retronom Regular", value: "Retronom Regular, sans-serif" },
+  { label: "System Sans", value: "system-ui, sans-serif" },
   { label: "Georgia", value: "Georgia, serif" },
   { label: "Impact", value: "Impact, sans-serif" },
   { label: "Courier New", value: "Courier New, monospace" },
@@ -65,20 +66,26 @@ export default function FreeCanvas({ workId }) {
   const innerRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const { data: items = [] } = useCanvasItems(workId);
+  const {
+    data: items = [],
+    isLoading: itemsLoading,
+    error: itemsError,
+  } = useCanvasItems(workId);
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [selectedId, setSelectedId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
 
-  const [tbFontSize, setTbFontSize] = useState(14);
-  const [tbBold, setTbBold] = useState(false);
-  const [tbItalic, setTbItalic] = useState(false);
-  const [tbColor, setTbColor] = useState("#F0EDE8");
-  const [tbFont, setTbFont] = useState("var(--font-ui)");
-  const [tbStroke, setTbStroke] = useState(0);
-  const [tbStrokeColor, setTbStrokeColor] = useState("#000000");
+  const [toolbarFontSize, setToolbarFontSize] = useState(14);
+  const [toolbarBold, setToolbarBold] = useState(false);
+  const [toolbarItalic, setToolbarItalic] = useState(false);
+  const [toolbarColor, setToolbarColor] = useState("#F0EDE8");
+  const [toolbarFont, setToolbarFont] = useState("var(--font-ui)");
+  const [toolbarStroke, setToolbarStroke] = useState(0);
+  const [toolbarStrokeColor, setToolbarStrokeColor] = useState("#000000");
 
   const panRef = useRef({ active: false, sX: 0, sY: 0, sPX: 0, sPY: 0 });
   const maxZRef = useRef(0);
@@ -93,27 +100,26 @@ export default function FreeCanvas({ workId }) {
     () => items.find((i) => i.id === selectedId),
     [items, selectedId],
   );
-
-  useEffect(() => {
-    if (!selectedItem) return;
-    if (selectedItem.item_type === "sticky") {
-      setTbFontSize(selectedItem.font_size || 14);
-      setTbBold(selectedItem.bold || false);
-      setTbItalic(selectedItem.italic || false);
-      setTbColor(selectedItem.color || "#F0A830");
-      setTbFont(selectedItem.font_family || "var(--font-ui)");
-      setTbStroke(selectedItem.stroke_width || 0);
-      setTbStrokeColor(selectedItem.stroke_color || "#000000");
-    } else if (selectedItem.item_type === "text") {
-      setTbFontSize(selectedItem.font_size || 24);
-      setTbBold(selectedItem.bold || false);
-      setTbItalic(selectedItem.italic || false);
-      setTbColor(selectedItem.font_color || "#F0EDE8");
-      setTbFont(selectedItem.font_family || "var(--font-display)");
-      setTbStroke(selectedItem.stroke_width || 0);
-      setTbStrokeColor(selectedItem.stroke_color || "#000000");
-    }
-  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tbFontSize = selectedItem
+    ? selectedItem.font_size ?? (selectedItem.item_type === "sticky" ? 14 : 24)
+    : toolbarFontSize;
+  const tbBold = selectedItem ? Boolean(selectedItem.bold) : toolbarBold;
+  const tbItalic = selectedItem ? Boolean(selectedItem.italic) : toolbarItalic;
+  const tbColor =
+    selectedItem?.item_type === "sticky"
+      ? selectedItem.color || "#F0A830"
+      : selectedItem?.item_type === "text"
+        ? selectedItem.font_color || "#F0EDE8"
+        : toolbarColor;
+  const tbFont =
+    selectedItem?.font_family ||
+    (selectedItem?.item_type === "sticky"
+      ? "var(--font-ui)"
+      : selectedItem?.item_type === "text"
+        ? "var(--font-display)"
+        : toolbarFont);
+  const tbStroke = selectedItem?.stroke_width ?? toolbarStroke;
+  const tbStrokeColor = selectedItem?.stroke_color || toolbarStrokeColor;
 
   // ── Optimistic ──
   const optSet = (id, fields) => {
@@ -154,6 +160,11 @@ export default function FreeCanvas({ workId }) {
       if (error) throw error;
       return data;
     },
+    onSuccess: (item) => {
+      setSelectedId(item.id);
+      setActionError("");
+    },
+    onError: (error) => setActionError(error.message || "Не удалось добавить элемент."),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ["canvas-items", workId] }),
   });
@@ -161,12 +172,17 @@ export default function FreeCanvas({ workId }) {
   const updateMut = useMutation({
     mutationFn: async ({ id, ...fields }) => {
       optSet(id, fields);
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("canvas_items")
         .update(fields)
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Элемент не найден или у вас нет доступа к нему.");
     },
+    onSuccess: () => setActionError(""),
+    onError: (error) => setActionError(error.message || "Не удалось сохранить элемент."),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ["canvas-items", workId] }),
   });
@@ -174,20 +190,28 @@ export default function FreeCanvas({ workId }) {
   const removeMut = useMutation({
     mutationFn: async (id) => {
       optRemove(id);
-      setSelectedId(null);
-      setEditingId(null);
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("canvas_items")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Элемент не найден или у вас нет доступа к нему.");
     },
+    onSuccess: () => {
+      setSelectedId(null);
+      setEditingId(null);
+      setActionError("");
+    },
+    onError: (error) => setActionError(error.message || "Не удалось удалить элемент."),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ["canvas-items", workId] }),
   });
 
   const bringToFront = useCallback(
-    (id) => {
+    (id, currentZ) => {
+      if (currentZ >= maxZRef.current) return;
       const newZ = maxZRef.current + 1;
       maxZRef.current = newZ;
       updateMut.mutate({ id, z_index: newZ });
@@ -236,12 +260,26 @@ export default function FreeCanvas({ workId }) {
     });
   };
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
+  const handleImageUpload = async (event) => {
+    const file = event.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setActionError("Выберите файл изображения.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setActionError("Изображение должно быть не больше 15 МБ.");
+      event.target.value = "";
+      return;
+    }
+
+    setImageUploading(true);
+    setActionError("");
     try {
       const result = await uploadToCloudinary(file, "aniscript/canvas");
-      addMut.mutate({
+      if (!result.secure_url) throw new Error("Не удалось получить адрес изображения.");
+      await addMut.mutateAsync({
         item_type: "image",
         title: "",
         content: "",
@@ -252,10 +290,12 @@ export default function FreeCanvas({ workId }) {
         width: 300,
         height: 220,
       });
-    } catch (err) {
-      console.error("Upload failed:", err);
+    } catch (error) {
+      setActionError(error.message || "Не удалось загрузить изображение.");
+    } finally {
+      setImageUploading(false);
+      event.target.value = "";
     }
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // ── Тулбар ──
@@ -263,31 +303,33 @@ export default function FreeCanvas({ workId }) {
     if (!selectedItem) return;
 
     if (field === "font_size") {
-      setTbFontSize(value);
-      updateMut.mutate({ id: selectedItem.id, font_size: value });
+      const next = Math.min(200, Math.max(6, Number(value) || 14));
+      setToolbarFontSize(next);
+      updateMut.mutate({ id: selectedItem.id, font_size: next });
     } else if (field === "bold") {
       const next = !tbBold;
-      setTbBold(next);
+      setToolbarBold(next);
       updateMut.mutate({ id: selectedItem.id, bold: next });
     } else if (field === "italic") {
       const next = !tbItalic;
-      setTbItalic(next);
+      setToolbarItalic(next);
       updateMut.mutate({ id: selectedItem.id, italic: next });
     } else if (field === "color") {
-      setTbColor(value);
+      setToolbarColor(value);
       if (selectedItem.item_type === "sticky") {
         updateMut.mutate({ id: selectedItem.id, color: value });
       } else {
         updateMut.mutate({ id: selectedItem.id, font_color: value });
       }
     } else if (field === "font_family") {
-      setTbFont(value);
+      setToolbarFont(value);
       updateMut.mutate({ id: selectedItem.id, font_family: value });
     } else if (field === "stroke_width") {
-      setTbStroke(value);
-      updateMut.mutate({ id: selectedItem.id, stroke_width: value });
+      const next = Math.min(20, Math.max(0, Number(value) || 0));
+      setToolbarStroke(next);
+      updateMut.mutate({ id: selectedItem.id, stroke_width: next });
     } else if (field === "stroke_color") {
-      setTbStrokeColor(value);
+      setToolbarStrokeColor(value);
       updateMut.mutate({ id: selectedItem.id, stroke_color: value });
     }
   };
@@ -363,7 +405,15 @@ export default function FreeCanvas({ workId }) {
   // ── Keyboard ──
   useEffect(() => {
     const onKey = (e) => {
-      if (!selectedId || editingId) return;
+      if (!selectedId || editingId || e.repeat) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         removeMut.mutate(selectedId);
@@ -379,6 +429,25 @@ export default function FreeCanvas({ workId }) {
 
   return (
     <div className={styles.wrap}>
+      {(actionError || itemsError) && (
+        <div className={styles.errorBanner} role="alert">
+          <span>{actionError || itemsError?.message || "Не удалось загрузить канвас."}</span>
+          {actionError ? (
+            <button type="button" onClick={() => setActionError("")} aria-label="Закрыть сообщение">
+              <X size={14} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["canvas-items", workId] })}
+            >
+              Повторить
+            </button>
+          )}
+        </div>
+      )}
+      {itemsLoading && <div className={styles.loadingNotice}>Загружаем элементы канваса…</div>}
+
       {/* Тулбар */}
       <div className={styles.toolbar}>
         <button className={styles.toolBtn} onClick={addSticky}>
@@ -389,9 +458,11 @@ export default function FreeCanvas({ workId }) {
         </button>
         <button
           className={styles.toolBtn}
+          type="button"
           onClick={() => fileInputRef.current?.click()}
+          disabled={imageUploading || addMut.isPending}
         >
-          <ImageIcon size={14} /> Фото
+          <ImageIcon size={14} /> {imageUploading ? "Загрузка…" : "Фото"}
         </button>
         <input
           ref={fileInputRef}
@@ -605,7 +676,7 @@ export default function FreeCanvas({ workId }) {
               zoom={zoom}
               onSelect={() => {
                 setSelectedId(item.id);
-                bringToFront(item.id);
+                bringToFront(item.id, Number(item.z_index) || 0);
               }}
               onStartEdit={() => setEditingId(item.id)}
               onStopEdit={() => setEditingId(null)}
@@ -640,11 +711,6 @@ function CanvasNode({
 
   const [localTitle, setLocalTitle] = useState(item.title);
   const [localContent, setLocalContent] = useState(item.content || "");
-
-  useEffect(() => {
-    setLocalTitle(item.title);
-    setLocalContent(item.content || "");
-  }, [item.title, item.content]);
 
   // ── Drag ──
   const handleMouseDown = useCallback(
@@ -769,7 +835,10 @@ function CanvasNode({
 
   const handleDblClick = (e) => {
     e.stopPropagation();
-    if (item.item_type !== "image") onStartEdit();
+    if (item.item_type === "image") return;
+    setLocalTitle(item.title || "");
+    setLocalContent(item.content || "");
+    onStartEdit();
   };
 
   const commitEdit = () => {
@@ -831,7 +900,7 @@ function CanvasNode({
       return (
         <div className={styles.stickyBody}>
           <p className={styles.stickyText} style={textStyle}>
-            {localContent || "Двойной клик..."}
+            {item.content || "Двойной клик..."}
           </p>
         </div>
       );
@@ -879,7 +948,7 @@ function CanvasNode({
     return (
       <div className={styles.textBody}>
         <span className={styles.textContent} style={tStyle}>
-          {localTitle || "Текст"}
+          {item.title || "Текст"}
         </span>
       </div>
     );

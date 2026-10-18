@@ -24,6 +24,15 @@ export const useReaderStore = create(
       setHeaderVisible: (headerVisible) => set({ headerVisible }),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
     }),
-    { name: "aniscript-reader" },
+    {
+      name: "aniscript-reader",
+      partialize: (state) => ({
+        font: state.font,
+        fontSize: state.fontSize,
+        lineHeight: state.lineHeight,
+        columnWidth: state.columnWidth,
+        theme: state.theme,
+      }),
+    },
   ),
 );

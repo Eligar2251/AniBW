@@ -249,7 +249,8 @@
 
 .bookmarkBtn,
 .likeBtn,
-.shareBtn {
+.shareBtn,
+.worldBtn {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -273,6 +274,16 @@
 .shareBtn:hover {
   border-color: var(--color-border);
   color: var(--color-text-primary);
+}
+
+.worldBtn {
+  text-decoration: none;
+}
+
+.worldBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(232, 53, 74, 0.045);
 }
 
 /* ── Основной контент ── */

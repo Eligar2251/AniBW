@@ -1,8 +1,8 @@
 // src/pages/WorkPage.jsx
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BookOpen,
   Heart,
@@ -16,11 +16,13 @@ import {
   Hash,
   Users,
   Star,
+  Map,
 } from "lucide-react";
 import { supabase } from "@lib/supabase";
 import { getCloudinaryUrl, transforms } from "@lib/cloudinary";
 import { useAuthStore } from "@store/authStore";
 import { useUIStore } from "@store/uiStore";
+import { useWorkBookmark, useWorkLike } from "@hooks/useWorkEngagement";
 import ChapterList from "@components/works/ChapterList";
 import WorkComments from "@components/works/WorkComments";
 import WorkCard from "@components/works/WorkCard";
@@ -56,11 +58,53 @@ function useSimilarWorks(workId, fandomId) {
         .from("works_full")
         .select("*")
         .eq("fandom_id", fandomId)
+        .eq("visibility", "public")
+        .neq("status", "draft")
         .neq("id", workId)
         .limit(4);
       return data || [];
     },
     enabled: !!fandomId,
+  });
+}
+
+function usePublicWorldAvailability(workId) {
+  return useQuery({
+    queryKey: ["public-world-availability", workId],
+    queryFn: async () => {
+      const [entriesResult, markersResult, mapResult] = await Promise.all([
+        supabase
+          .from("world_entries")
+          .select("id", { count: "exact", head: true })
+          .eq("work_id", workId)
+          .eq("is_published", true),
+        supabase
+          .from("map_markers")
+          .select("id", { count: "exact", head: true })
+          .eq("work_id", workId)
+          .eq("is_published", true),
+        supabase
+          .from("world_map_settings")
+          .select("background_url, map_state")
+          .eq("work_id", workId)
+          .eq("is_published", true)
+          .maybeSingle(),
+      ]);
+      if (entriesResult.error) throw entriesResult.error;
+      if (markersResult.error) throw markersResult.error;
+      if (mapResult.error) throw mapResult.error;
+      return (
+        (entriesResult.count || 0) > 0 ||
+        (markersResult.count || 0) > 0 ||
+        Boolean(mapResult.data?.background_url) ||
+        (mapResult.data?.map_state?.tiles?.length || 0) > 0 ||
+        (mapResult.data?.map_state?.strokes?.length || 0) > 0 ||
+        (mapResult.data?.map_state?.stamps?.length || 0) > 0 ||
+        (mapResult.data?.map_state?.countries?.length || 0) > 0
+      );
+    },
+    enabled: !!workId,
+    retry: 1,
   });
 }
 
@@ -74,13 +118,64 @@ const RATING_INFO = {
 
 export default function WorkPage() {
   const { id } = useParams();
+  const location = useLocation();
   const { data: work, isLoading } = useWork(id);
   const { data: similar = [] } = useSimilarWorks(id, work?.fandom_id);
+  const { data: hasPublishedWorld = false } = usePublicWorldAvailability(id);
+  const { isLiked, toggleLike } = useWorkLike(id);
+  const { isBookmarked, toggleBookmark } = useWorkBookmark(id);
   const [descExpanded, setDescExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState("chapters");
+  const [shareCopied, setShareCopied] = useState(false);
 
   const user = useAuthStore((s) => s.user);
   const openAuthModal = useUIStore((s) => s.openAuthModal);
+
+  useEffect(() => {
+    if (location.hash !== "#chapters") return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById("chapters")?.scrollIntoView({ behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [location.hash, id]);
+
+  const handleLike = () => {
+    if (!user) {
+      openAuthModal("login");
+      return;
+    }
+    toggleLike.mutate(undefined, {
+      onError: (error) => window.alert(error.message || "Не удалось поставить лайк"),
+    });
+  };
+
+  const handleBookmark = () => {
+    if (!user) {
+      openAuthModal("login");
+      return;
+    }
+    toggleBookmark.mutate(undefined, {
+      onError: (error) => window.alert(error.message || "Не удалось изменить закладку"),
+    });
+  };
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: work?.title, url });
+        return;
+      }
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1800);
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        window.prompt("Скопируйте ссылку на произведение", url);
+      }
+    }
+  };
 
   if (isLoading) return <WorkPageSkeleton />;
   if (!work) return <div>Произведение не найдено</div>;
@@ -236,19 +331,41 @@ export default function WorkPage() {
                 <BookOpen size={16} strokeWidth={1.5} />
                 Читать с начала
               </Link>
+              {hasPublishedWorld && (
+                <Link
+                  to={`/works/${work.id}/world`}
+                  className={styles.worldBtn}
+                  title="Открыть энциклопедию и атлас мира"
+                >
+                  <Map size={16} strokeWidth={1.5} />
+                  Мир
+                </Link>
+              )}
               <button
                 className={styles.bookmarkBtn}
-                onClick={() => (user ? null : openAuthModal("login"))}
+                onClick={handleBookmark}
+                disabled={toggleBookmark.isPending}
+                aria-pressed={isBookmarked}
+                title={isBookmarked ? "Убрать из закладок" : "Добавить в закладки"}
               >
                 <Bookmark size={16} strokeWidth={1.5} />В закладки
               </button>
               <button
                 className={styles.likeBtn}
-                onClick={() => (user ? null : openAuthModal("login"))}
+                onClick={handleLike}
+                disabled={toggleLike.isPending}
+                aria-label={isLiked ? "Убрать лайк" : "Поставить лайк"}
+                aria-pressed={isLiked}
+                title={isLiked ? "Убрать лайк" : "Поставить лайк"}
               >
                 <Heart size={16} strokeWidth={1.5} />
               </button>
-              <button className={styles.shareBtn}>
+              <button
+                className={styles.shareBtn}
+                onClick={handleShare}
+                aria-label="Поделиться произведением"
+                title={shareCopied ? "Ссылка скопирована" : "Поделиться"}
+              >
                 <Share2 size={16} strokeWidth={1.5} />
               </button>
             </div>
@@ -334,7 +451,7 @@ export default function WorkPage() {
           </motion.div>
 
           {/* Табы */}
-          <div className={styles.tabs}>
+          <div className={styles.tabs} id="chapters">
             {["chapters", "comments", "similar"].map((tab) => (
               <button
                 key={tab}

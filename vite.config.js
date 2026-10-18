@@ -20,6 +20,10 @@ export default defineConfig({
       "@utils": path.resolve(__dirname, "./src/utils"),
     },
   },
+  server: {
+    host: "0.0.0.0",
+    allowedHosts: true,
+  },
   css: {
     modules: {
       localsConvention: "camelCase",
