@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Brush,
@@ -6,6 +6,7 @@ import {
   CircleHelp,
   Eraser,
   Globe2,
+  Hand,
   Layers,
   MapPinned,
   Maximize2,
@@ -14,8 +15,11 @@ import {
   Mountain,
   PaintBucket,
   Plus,
+  Redo2,
   RotateCcw,
+  RotateCw,
   Save,
+  Undo2,
   Upload,
 } from "lucide-react";
 import { supabase } from "@lib/supabase";
@@ -90,13 +94,24 @@ function MapBuilderEditor({ workId, settings }) {
   const replaceInputRef = useRef(null);
   const workspaceRef = useRef(null);
   const revisionRef = useRef(0);
+  const mapStateRef = useRef(null);
+  const historyRef = useRef({ undo: [], redo: [] });
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const [mapState, setMapState] = useState(() => normalizeMapState(settings?.map_state));
+  useEffect(() => {
+    mapStateRef.current = mapState;
+  }, [mapState]);
   const [selectedTextureId, setSelectedTextureId] = useState("grass");
   const [tool, setTool] = useState("brush");
   const [brushSize, setBrushSize] = useState(0.055);
   const [brushOpacity, setBrushOpacity] = useState(1);
   const [forestDensity, setForestDensity] = useState(0.92);
+  const [brushSmoothing, setBrushSmoothing] = useState(0.72);
+  const [textureRotation, setTextureRotation] = useState(0);
   const [stampSize, setStampSize] = useState(0.1);
+  const [stampRotation, setStampRotation] = useState(0);
+  const [citySize, setCitySize] = useState(0.3);
   const [cityType, setCityType] = useState("city");
   const [selectedCountryId, setSelectedCountryId] = useState(null);
   const [countryName, setCountryName] = useState("Новая страна");
@@ -107,6 +122,12 @@ function MapBuilderEditor({ workId, settings }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewMode, setViewMode] = useState("2d");
   const [zoom, setZoom] = useState(0.95);
+  const [mapRotation, setMapRotation] = useState(0);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [terrainTool, setTerrainTool] = useState("orbit");
+  const [terrainBrushSize, setTerrainBrushSize] = useState(0.05);
+  const [terrainStrength, setTerrainStrength] = useState(0.04);
   const [sheetColumns, setSheetColumns] = useState(4);
   const [sheetRows, setSheetRows] = useState(4);
   const [uploading, setUploading] = useState(false);
@@ -186,12 +207,66 @@ function MapBuilderEditor({ workId, settings }) {
   });
 
   const updateMap = (change) => {
+    const current = mapStateRef.current || mapState;
+    const next = typeof change === "function" ? change(current) : change;
+    if (!next || next === current) return;
+    historyRef.current.undo.push(current);
+    if (historyRef.current.undo.length > 60) historyRef.current.undo.shift();
+    historyRef.current.redo = [];
+    mapStateRef.current = next;
+    setCanUndo(historyRef.current.undo.length > 0);
+    setCanRedo(false);
     revisionRef.current += 1;
-    setMapState((current) => (typeof change === "function" ? change(current) : change));
+    setMapState(next);
     setIsDirty(true);
     setStatusMessage("");
     setActionError("");
   };
+
+  const undoMap = useCallback(() => {
+    const previous = historyRef.current.undo.pop();
+    if (!previous) return;
+    historyRef.current.redo.push(mapStateRef.current);
+    mapStateRef.current = previous;
+    setCanUndo(historyRef.current.undo.length > 0);
+    setCanRedo(true);
+    revisionRef.current += 1;
+    setMapState(previous);
+    setIsDirty(true);
+    setStatusMessage("Изменение отменено.");
+    setActionError("");
+  }, []);
+
+  const redoMap = useCallback(() => {
+    const next = historyRef.current.redo.pop();
+    if (!next) return;
+    historyRef.current.undo.push(mapStateRef.current);
+    mapStateRef.current = next;
+    setCanUndo(true);
+    setCanRedo(historyRef.current.redo.length > 0);
+    revisionRef.current += 1;
+    setMapState(next);
+    setIsDirty(true);
+    setStatusMessage("Изменение восстановлено.");
+    setActionError("");
+  }, []);
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      if (event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redoMap();
+        else undoMap();
+      } else if (event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        redoMap();
+      }
+    };
+    window.addEventListener("keydown", handleHistoryShortcut);
+    return () => window.removeEventListener("keydown", handleHistoryShortcut);
+  }, [redoMap, undoMap]);
 
   const addStroke = (stroke) => {
     if (!stroke?.points?.length) return;
@@ -239,6 +314,7 @@ function MapBuilderEditor({ workId, settings }) {
     updateMap((current) => ({
       ...current,
       stamps: (current.stamps || []).filter((stamp) => stamp.id !== stampId),
+      cities: current.cities.filter((city) => city.stampId !== stampId),
     }));
   };
 
@@ -256,9 +332,10 @@ function MapBuilderEditor({ workId, settings }) {
     if (texture.brushMode === "forest" || texture.brushMode === "cluster") {
       setForestDensity(texture.forestDensity || 0.92);
     }
-    if (texture.placement === "stamp") setTool("stamp");
+    if (texture.brushMode === "wall") setTool("wall");
+    else if (texture.placement === "stamp") setTool("stamp");
     else if (texture.placement === "scatter") setTool("scatter");
-    else if (tool === "stamp" || tool === "scatter") setTool("brush");
+    else if (["stamp", "scatter", "wall"].includes(tool)) setTool("brush");
   };
 
   const toggleFullscreen = async () => {
@@ -275,30 +352,70 @@ function MapBuilderEditor({ workId, settings }) {
 
   const changeViewMode = (nextMode) => {
     setViewMode(nextMode);
+    if (nextMode === "3d") setTerrainTool("orbit");
     if (nextMode !== "2d" && countryDraftCount) {
       setCountryDraftCount(0);
       setCountryCancelSignal((value) => value + 1);
     }
   };
 
+  const changeCamera = (camera) => {
+    if (Number.isFinite(camera.zoom)) setZoom(camera.zoom);
+    if (Number.isFinite(camera.rotation)) setMapRotation(camera.rotation);
+    if (Number.isFinite(camera.panX)) setPanX(camera.panX);
+    if (Number.isFinite(camera.panY)) setPanY(camera.panY);
+  };
+
+  const rotateMap = (amount) => {
+    setMapRotation((value) => ((value + amount) % 360 + 360) % 360);
+  };
+
+  const resetMapView = () => {
+    setZoom(0.95);
+    setMapRotation(0);
+    setPanX(0);
+    setPanY(0);
+  };
+
   const addCity = (x, y) => {
+    const isVillage = cityType === "village";
     const cityName = window.prompt(
-      cityType === "village" ? "Название поселения" : "Название города",
-      cityType === "village" ? "Новая деревня" : "Новый город",
+      isVillage ? "Название поселения" : "Название города",
+      isVillage ? "Новая деревня" : "Новый город",
     );
     if (!cityName?.trim()) return;
+    const id = createId("city");
+    const textureId = isVillage ? "village" : "city";
+    const size = isVillage ? Math.min(citySize, 0.24) : citySize;
+    const stamp = {
+      id: createId("stamp"),
+      textureId,
+      x,
+      y,
+      size,
+      rotation: stampRotation,
+    };
     updateMap((current) => ({
       ...current,
       cities: [
         ...current.cities,
-        { id: createId("city"), name: cityName.trim().slice(0, 80), x, y, type: cityType },
+        { id, stampId: stamp.id, name: cityName.trim().slice(0, 80), x, y, type: cityType },
       ],
+      stamps: [...(current.stamps || []), stamp].slice(-3000),
     }));
   };
 
-  const setBaseTexture = (textureId) => {
-    if (mapState.baseTextureId === textureId) return;
-    updateMap((current) => ({ ...current, baseTextureId: textureId }));
+  const addHeightStroke = (stroke) => {
+    if (!stroke?.points?.length) return;
+    updateMap((current) => ({
+      ...current,
+      heightStrokes: [...(current.heightStrokes || []), stroke].slice(-1000),
+    }));
+  };
+
+  const setBaseTexture = (textureId, rotation = textureRotation) => {
+    if (mapState.baseTextureId === textureId && mapState.baseTextureRotation === rotation) return;
+    updateMap((current) => ({ ...current, baseTextureId: textureId, baseTextureRotation: rotation }));
   };
 
   const resizeMap = (width, height) => {
@@ -385,10 +502,16 @@ function MapBuilderEditor({ workId, settings }) {
   };
 
   const deleteCity = (cityId) => {
-    updateMap((current) => ({
-      ...current,
-      cities: current.cities.filter((city) => city.id !== cityId),
-    }));
+    updateMap((current) => {
+      const city = current.cities.find((item) => item.id === cityId);
+      return {
+        ...current,
+        cities: current.cities.filter((item) => item.id !== cityId),
+        stamps: city?.stampId
+          ? (current.stamps || []).filter((stamp) => stamp.id !== city.stampId)
+          : current.stamps,
+      };
+    });
   };
 
   const selectSize = (event) => {
@@ -407,10 +530,30 @@ function MapBuilderEditor({ workId, settings }) {
           <span className={styles.headingIcon}><Mountain size={17} /></span>
           <div>
             <h2>Мастерская карт</h2>
-            <p>Свободное рисование, отдельные штампы, границы стран и поворотный 3D-рельеф.</p>
+            <p>Плавная свободная кисть, соединяемые текстурные стены и редактируемый 3D-рельеф.</p>
           </div>
         </div>
         <div className={styles.headerActions}>
+          <button
+            className={styles.toolButton}
+            type="button"
+            onClick={undoMap}
+            disabled={!canUndo}
+            title="Отменить последнее действие · Ctrl+Z"
+            aria-label="Отменить последнее действие"
+          >
+            <Undo2 size={14} />
+          </button>
+          <button
+            className={styles.toolButton}
+            type="button"
+            onClick={redoMap}
+            disabled={!canRedo}
+            title="Повторить действие · Ctrl+Shift+Z"
+            aria-label="Повторить действие"
+          >
+            <Redo2 size={14} />
+          </button>
           <label className={`${styles.publishToggle} ${publicationDisabled ? styles.disabled : ""}`}>
             <input
               type="checkbox"
@@ -437,6 +580,9 @@ function MapBuilderEditor({ workId, settings }) {
           <button type="button" className={`${styles.toolButton} ${tool === "brush" ? styles.active : ""}`} onClick={() => setTool("brush")}>
             <Brush size={14} /> Кисть
           </button>
+          <button type="button" className={`${styles.toolButton} ${tool === "pan" ? styles.active : ""}`} onClick={() => setTool("pan")} title="Перемещать карту · пробел или правая кнопка тоже работают">
+            <Hand size={14} /> Перемещение
+          </button>
           <button type="button" className={`${styles.toolButton} ${tool === "fill" ? styles.active : ""}`} onClick={() => setTool("fill")}>
             <PaintBucket size={14} /> Основа
           </button>
@@ -447,7 +593,7 @@ function MapBuilderEditor({ workId, settings }) {
             <Mountain size={14} /> Стена
           </button>
           <button type="button" className={`${styles.toolButton} ${tool === "city" ? styles.active : ""}`} onClick={() => setTool("city")}>
-            <MapPinned size={14} /> Метка
+            <MapPinned size={14} /> Город / деревня
           </button>
           <button type="button" className={`${styles.toolButton} ${tool === "country" ? styles.active : ""}`} onClick={() => setTool("country")}>
             <Globe2 size={14} /> Граница
@@ -467,27 +613,29 @@ function MapBuilderEditor({ workId, settings }) {
           )}
         </div>
 
-        {(tool === "brush" || tool === "erase" || tool === "wall") && (
+        {(tool === "brush" || tool === "erase" || tool === "wall" || tool === "fill") && (
           <div className={styles.brushControls}>
-            <label className={styles.brushControl}>
-              <span>
-                {tool === "wall" ? "Толщина стены" : isForestTexture ? "Ширина леса" : "Размер кисти"}
-                <b>
-                  {Math.round(isForestTexture && tool !== "wall"
-                    ? Math.max(56, Math.min(340, brushSize * mapState.height * 2.15))
-                    : brushSize * mapState.height)} px
-                </b>
-              </span>
-              <input
-                type="range"
-                min="0.005"
-                max="0.22"
-                step="0.005"
-                value={brushSize}
-                onChange={(event) => setBrushSize(Number(event.target.value))}
-                aria-label={tool === "wall" ? "Толщина стены" : isForestTexture ? "Ширина лесной кисти" : "Размер кисти"}
-              />
-            </label>
+            {tool !== "fill" && (
+              <label className={styles.brushControl}>
+                <span>
+                  {tool === "wall" ? "Толщина стены" : isForestTexture ? "Ширина леса" : "Размер кисти"}
+                  <b>
+                    {Math.round(isForestTexture && tool !== "wall"
+                      ? Math.max(56, Math.min(340, brushSize * mapState.height * 2.15))
+                      : brushSize * mapState.height)} px
+                  </b>
+                </span>
+                <input
+                  type="range"
+                  min="0.005"
+                  max="0.22"
+                  step="0.005"
+                  value={brushSize}
+                  onChange={(event) => setBrushSize(Number(event.target.value))}
+                  aria-label={tool === "wall" ? "Толщина стены" : isForestTexture ? "Ширина лесной кисти" : "Размер кисти"}
+                />
+              </label>
+            )}
             {tool === "brush" && isForestTexture && (
               <label className={styles.brushControl}>
                 <span>Плотность леса <b>{Math.round(forestDensity * 100)}%</b></span>
@@ -516,18 +664,79 @@ function MapBuilderEditor({ workId, settings }) {
                 />
               </label>
             )}
+            {(tool === "brush" || tool === "wall") && (
+              <label className={styles.brushControl}>
+                <span>Сглаживание <b>{Math.round(brushSmoothing * 100)}%</b></span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={Math.round(brushSmoothing * 100)}
+                  onChange={(event) => setBrushSmoothing(Number(event.target.value) / 100)}
+                  aria-label="Сглаживание линии кисти"
+                />
+              </label>
+            )}
+            {(tool === "brush" || tool === "wall" || tool === "fill") && !isForestTexture && (
+              <label className={styles.brushControl}>
+                <span>Поворот текстуры <b>{Math.round(textureRotation)}°</b></span>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  step="5"
+                  value={textureRotation}
+                  onChange={(event) => setTextureRotation(Number(event.target.value))}
+                  aria-label="Поворот текстуры"
+                />
+              </label>
+            )}
           </div>
         )}
 
         {tool === "city" && (
-          <label className={styles.selectWrap}>
-            Тип
-            <select value={cityType} onChange={(event) => setCityType(event.target.value)}>
-              <option value="city">Город</option>
-              <option value="village">Посёлок</option>
-            </select>
-            <ChevronDown size={12} />
-          </label>
+          <>
+            <label className={styles.selectWrap}>
+              Тип
+              <select
+                value={cityType}
+                onChange={(event) => {
+                  const nextType = event.target.value;
+                  setCityType(nextType);
+                  setCitySize(nextType === "village" ? 0.22 : 0.3);
+                }}
+              >
+                <option value="city">Город</option>
+                <option value="village">Посёлок</option>
+              </select>
+              <ChevronDown size={12} />
+            </label>
+            <label className={styles.brushControl}>
+              <span>Размер штампа <b>{Math.round(citySize * mapState.height)} px</b></span>
+              <input
+                type="range"
+                min="0.12"
+                max="0.48"
+                step="0.01"
+                value={citySize}
+                onChange={(event) => setCitySize(Number(event.target.value))}
+                aria-label="Размер города или поселения"
+              />
+            </label>
+            <label className={styles.brushControl}>
+              <span>Поворот <b>{Math.round(stampRotation)}°</b></span>
+              <input
+                type="range"
+                min="-180"
+                max="180"
+                step="5"
+                value={stampRotation}
+                onChange={(event) => setStampRotation(Number(event.target.value))}
+                aria-label="Поворот штампа города"
+              />
+            </label>
+          </>
         )}
 
         {(tool === "stamp" || tool === "scatter") && (
@@ -541,6 +750,20 @@ function MapBuilderEditor({ workId, settings }) {
               value={stampSize}
               onChange={(event) => setStampSize(Number(event.target.value))}
               aria-label="Размер штампа"
+            />
+          </label>
+        )}
+        {tool === "stamp" && (
+          <label className={styles.brushControl}>
+            <span>Поворот штампа <b>{Math.round(stampRotation)}°</b></span>
+            <input
+              type="range"
+              min="-180"
+              max="180"
+              step="5"
+              value={stampRotation}
+              onChange={(event) => setStampRotation(Number(event.target.value))}
+              aria-label="Поворот текстуры-штампа"
             />
           </label>
         )}
@@ -599,11 +822,69 @@ function MapBuilderEditor({ workId, settings }) {
           </button>
         </div>
         {viewMode === "2d" && (
-          <div className={styles.zoomControls}>
-            <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value - 0.1))} aria-label="Уменьшить масштаб"><Minus size={13} /></button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button type="button" onClick={() => setZoom((value) => Math.min(1.7, value + 0.1))} aria-label="Увеличить масштаб"><Plus size={13} /></button>
+          <div className={styles.zoomControls} aria-label="Навигация по карте">
+            <button type="button" onClick={() => setZoom((value) => Math.max(0.3, value - 0.1))} aria-label="Уменьшить масштаб"><Minus size={13} /></button>
+            <span>{Math.round(zoom * 100)}% · {Math.round(mapRotation)}°</span>
+            <button type="button" onClick={() => setZoom((value) => Math.min(2.5, value + 0.1))} aria-label="Увеличить масштаб"><Plus size={13} /></button>
+            <button type="button" onClick={() => rotateMap(-15)} aria-label="Повернуть карту влево"><RotateCcw size={13} /></button>
+            <button type="button" onClick={() => rotateMap(15)} aria-label="Повернуть карту вправо"><RotateCw size={13} /></button>
+            <button type="button" onClick={resetMapView} aria-label="Сбросить поворот и положение карты"><MapPinned size={13} /></button>
           </div>
+        )}
+        {viewMode === "3d" && (
+          <>
+            <div className={styles.toolGroup} role="group" aria-label="Инструменты рельефа 3D">
+              <button type="button" className={`${styles.toolButton} ${terrainTool === "orbit" ? styles.active : ""}`} onClick={() => setTerrainTool("orbit")}>
+                <Hand size={14} /> Вращать
+              </button>
+              <button type="button" className={`${styles.toolButton} ${terrainTool === "raise" ? styles.active : ""}`} onClick={() => setTerrainTool("raise")}>
+                <Plus size={14} /> Поднять
+              </button>
+              <button type="button" className={`${styles.toolButton} ${terrainTool === "lower" ? styles.active : ""}`} onClick={() => setTerrainTool("lower")}>
+                <Minus size={14} /> Углубить
+              </button>
+            </div>
+            {(terrainTool === "raise" || terrainTool === "lower") && (
+              <div className={styles.brushControls}>
+                <label className={styles.brushControl}>
+                  <span>Радиус <b>{Math.round(terrainBrushSize * mapState.height)} px</b></span>
+                  <input
+                    type="range"
+                    min="0.01"
+                    max="0.22"
+                    step="0.005"
+                    value={terrainBrushSize}
+                    onChange={(event) => setTerrainBrushSize(Number(event.target.value))}
+                    aria-label="Радиус кисти рельефа"
+                  />
+                </label>
+                <label className={styles.brushControl}>
+                  <span>Сила рельефа <b>{Math.round(terrainStrength * 100)}%</b></span>
+                  <input
+                    type="range"
+                    min="0.01"
+                    max="0.12"
+                    step="0.005"
+                    value={terrainStrength}
+                    onChange={(event) => setTerrainStrength(Number(event.target.value))}
+                    aria-label="Сила кисти рельефа"
+                  />
+                </label>
+                <label className={styles.brushControl}>
+                  <span>Сглаживание <b>{Math.round(brushSmoothing * 100)}%</b></span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={Math.round(brushSmoothing * 100)}
+                    onChange={(event) => setBrushSmoothing(Number(event.target.value) / 100)}
+                    aria-label="Сглаживание кисти рельефа"
+                  />
+                </label>
+              </div>
+            )}
+          </>
         )}
         <button
           type="button"
@@ -632,18 +913,25 @@ function MapBuilderEditor({ workId, settings }) {
 
       <div className={styles.workspace}>
         <main className={styles.mapPanel}>
-          <div className={styles.mapViewport} data-tool={tool}>
+          <div className={`${styles.mapViewport} ${viewMode === "2d" ? styles.mapViewport2d : ""}`} data-tool={viewMode === "2d" ? tool : terrainTool}>
             {viewMode === "2d" ? (
               <WorldMapCanvas2D
                 mapState={mapState}
                 zoom={zoom}
+                rotation={mapRotation}
+                panX={panX}
+                panY={panY}
+                onCameraChange={changeCamera}
                 editable
                 activeTool={tool}
                 selectedTextureId={selectedTextureId}
                 brushSize={brushSize}
                 brushOpacity={brushOpacity}
+                brushSmoothing={brushSmoothing}
+                textureRotation={textureRotation}
                 forestDensity={forestDensity}
                 stampSize={stampSize}
+                stampRotation={stampRotation}
                 selectedCountryId={selectedCountryId}
                 countryFinishSignal={countryFinishSignal}
                 countryCancelSignal={countryCancelSignal}
@@ -658,14 +946,22 @@ function MapBuilderEditor({ workId, settings }) {
               />
             ) : (
               <Suspense fallback={<div className={styles.status}>Загружаем 3D-сцену…</div>}>
-                <WorldMap3D mapState={mapState} />
+                <WorldMap3D
+                  mapState={mapState}
+                  editable
+                  sculptMode={terrainTool === "raise" || terrainTool === "lower" ? terrainTool : null}
+                  sculptSize={terrainBrushSize}
+                  sculptStrength={terrainStrength}
+                  sculptSmoothing={brushSmoothing}
+                  onHeightStrokeComplete={addHeightStroke}
+                />
               </Suspense>
             )}
           </div>
           <div className={styles.mapFooter}>
             <span>{mapState.width} × {mapState.height} px</span>
-            <span>{mapState.strokes.length} мазков · {(mapState.stamps || []).length} объектов · {(mapState.countries || []).length} стран · {mapState.cities.length} меток</span>
-            <span><CircleHelp size={13} /> Лес — протяжка PNG-группами без квадратных швов · стены — протяжка · города/замки — один щелчок · одиночные деревья — протяжка без наложений · границы — точки, затем Enter · 3D — тяните для вращения</span>
+            <span>{mapState.strokes.length} мазков · {(mapState.heightStrokes || []).length} правок рельефа · {(mapState.stamps || []).length} объектов · {(mapState.countries || []).length} стран · {mapState.cities.length} меток</span>
+            <span><CircleHelp size={13} /> Колесо — масштаб · пробел/правая кнопка — перемещение · 2D-поворот — кнопки рядом с масштабом · сглаживание линии на панели · город или деревня — один крупный штамп · 3D: «Поднять/Углубить» и тяните по рельефу</span>
           </div>
         </main>
 

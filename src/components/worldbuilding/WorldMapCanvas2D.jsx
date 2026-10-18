@@ -23,10 +23,18 @@ function createObjectId(prefix) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`;
 }
 
+function getTextureAspect(texture, image) {
+  if (!image?.naturalWidth || !image?.naturalHeight) return 1;
+  if (texture.sourceType !== "sheet") return image.naturalWidth / image.naturalHeight;
+  const cols = Math.max(1, Number(texture.cols) || 1);
+  const rows = Math.max(1, Number(texture.rows) || 1);
+  return (image.naturalWidth / cols) / (image.naturalHeight / rows);
+}
+
 function getStampRadius(stamp, mapState, textures, images) {
   const texture = getMapTexture(stamp.textureId, textures);
   const image = images?.[texture.src];
-  const aspect = image?.naturalWidth && image?.naturalHeight ? image.naturalWidth / image.naturalHeight : 1;
+  const aspect = getTextureAspect(texture, image);
   const stampHeight = Math.max(10, (Number(stamp.size) || texture.defaultSize || 0.08) * mapState.height);
   const stampWidth = stampHeight * aspect;
   return texture.footprint === "round"
@@ -72,17 +80,46 @@ function drawCountryDraft(context, mapState, points) {
   context.restore();
 }
 
+function getMapPoint(event, stage, mapState, camera) {
+  const rect = stage?.getBoundingClientRect();
+  if (!rect || !rect.width || !rect.height || !mapState) return null;
+  const centerX = rect.left + rect.width / 2 + camera.panX;
+  const centerY = rect.top + rect.height / 2 + camera.panY;
+  const dx = event.clientX - centerX;
+  const dy = event.clientY - centerY;
+  const angle = (camera.rotation * Math.PI) / 180;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const mapX = (cosine * dx + sine * dy) / camera.zoom + mapState.width / 2;
+  const mapY = (-sine * dx + cosine * dy) / camera.zoom + mapState.height / 2;
+  return {
+    x: Math.min(1, Math.max(0, mapX / mapState.width)),
+    y: Math.min(1, Math.max(0, mapY / mapState.height)),
+  };
+}
+
+function clampPan(value, limit) {
+  return Math.min(limit, Math.max(-limit, value));
+}
+
 export default function WorldMapCanvas2D({
   mapState,
   customTextures = mapState?.textures || [],
   zoom = 1,
+  rotation = 0,
+  panX = 0,
+  panY = 0,
+  onCameraChange,
   editable = false,
   activeTool = "brush",
   selectedTextureId = "grass",
   brushSize = 0.06,
   brushOpacity = 1,
+  brushSmoothing = 0.72,
+  textureRotation = 0,
   forestDensity = 0.92,
   stampSize,
+  stampRotation = 0,
   selectedCountryId = null,
   countryFinishSignal = 0,
   countryCancelSignal = 0,
@@ -96,13 +133,17 @@ export default function WorldMapCanvas2D({
   onSelectCountry,
 }) {
   const canvasRef = useRef(null);
+  const previewCanvasRef = useRef(null);
+  const stageRef = useRef(null);
   const pointerRef = useRef({ mode: null });
   const countryDraftRef = useRef([]);
   const finishCountryRef = useRef(null);
   const cancelCountryRef = useRef(null);
   const finishSignalRef = useRef(countryFinishSignal);
   const cancelSignalRef = useRef(countryCancelSignal);
+  const spaceHeldRef = useRef(false);
   const patternCacheRef = useRef(new Map());
+  const previewPatternCacheRef = useRef(new Map());
   const pixelRatio = Math.min(
     typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
     1.5,
@@ -117,6 +158,12 @@ export default function WorldMapCanvas2D({
     [textures],
   );
   const selectedTexture = textures.find((texture) => texture.id === selectedTextureId) || textures[0];
+  const camera = useMemo(() => ({
+    zoom: Math.min(2.5, Math.max(0.3, Number(zoom) || 1)),
+    rotation: Number(rotation) || 0,
+    panX: Number(panX) || 0,
+    panY: Number(panY) || 0,
+  }), [panX, panY, rotation, zoom]);
 
   const setDraft = useCallback((points) => {
     countryDraftRef.current = points;
@@ -155,10 +202,12 @@ export default function WorldMapCanvas2D({
   useEffect(() => {
     let isCurrent = true;
     patternCacheRef.current.clear();
+    previewPatternCacheRef.current.clear();
     const sources = JSON.parse(textureSources);
     Promise.all(sources.map(loadImage)).then((loaded) => {
       if (isCurrent) {
         patternCacheRef.current.clear();
+        previewPatternCacheRef.current.clear();
         setImages(Object.fromEntries(loaded));
       }
     });
@@ -177,21 +226,30 @@ export default function WorldMapCanvas2D({
       canvas.height = pixelHeight;
       patternCacheRef.current.clear();
     }
-  }, [canvasHeight, canvasWidth, pixelRatio]);
+    if (editable && previewCanvasRef.current) {
+      const previewCanvas = previewCanvasRef.current;
+      if (previewCanvas.width !== pixelWidth || previewCanvas.height !== pixelHeight) {
+        previewCanvas.width = pixelWidth;
+        previewCanvas.height = pixelHeight;
+        previewPatternCacheRef.current.clear();
+      }
+    }
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !mapState) return;
     const context = canvas.getContext("2d");
     if (!context) return;
-
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
     context.clearRect(0, 0, mapState.width, mapState.height);
     renderMapCanvas(context, mapState, images, true, selectedCountryId, patternCacheRef.current);
-    drawCountryDraft(context, mapState, countryDraft);
-  }, [countryDraft, images, mapState, pixelRatio, selectedCountryId]);
+
+    if (previewCanvasRef.current) {
+      const previewContext = previewCanvasRef.current.getContext("2d");
+      previewContext?.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      previewContext?.clearRect(0, 0, mapState.width, mapState.height);
+      if (previewContext) drawCountryDraft(previewContext, mapState, countryDraft);
+    }
+  }, [canvasHeight, canvasWidth, countryDraft, editable, images, mapState, pixelRatio, selectedCountryId]);
 
   useEffect(() => {
     if (!editable || activeTool !== "country") return undefined;
@@ -212,28 +270,67 @@ export default function WorldMapCanvas2D({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeTool, editable, setDraft]);
 
-  const getMapPoint = (event) => {
-    const canvas = canvasRef.current;
-    const rect = canvas?.getBoundingClientRect();
-    if (!rect || !mapState || !rect.width || !rect.height) return null;
-    return {
-      x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
-      y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+  useEffect(() => {
+    if (!editable) return undefined;
+    const handleSpace = (event) => {
+      if (event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      if (event.code === "Space") {
+        spaceHeldRef.current = event.type === "keydown";
+        if (event.type === "keydown") event.preventDefault();
+      }
     };
+    window.addEventListener("keydown", handleSpace);
+    window.addEventListener("keyup", handleSpace);
+    return () => {
+      window.removeEventListener("keydown", handleSpace);
+      window.removeEventListener("keyup", handleSpace);
+      spaceHeldRef.current = false;
+    };
+  }, [editable]);
+
+  const readMapPoint = (event) => getMapPoint(event, stageRef.current, mapState, camera);
+
+  const beginPan = (event) => {
+    const shouldPan = activeTool === "pan" || event.button === 1 || event.button === 2 || spaceHeldRef.current;
+    if (!shouldPan) return false;
+    event.preventDefault();
+    stageRef.current?.setPointerCapture?.(event.pointerId);
+    pointerRef.current = {
+      mode: "pan",
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPanX: camera.panX,
+      startPanY: camera.panY,
+    };
+    return true;
+  };
+
+  const getPreviewContext = () => {
+    const context = previewCanvasRef.current?.getContext("2d");
+    if (!context) return null;
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    return context;
   };
 
   const appendBrushPoint = (event) => {
     const active = pointerRef.current;
     if (active.mode !== "brush" || active.pointerId !== event.pointerId) return;
-    const point = getMapPoint(event);
-    if (!point) return;
+    const rawPoint = readMapPoint(event);
+    if (!rawPoint) return;
+    const amount = 1 - Math.min(0.88, Math.max(0, active.stroke.smoothing) * 0.82);
+    const point = {
+      x: active.filteredPoint.x + (rawPoint.x - active.filteredPoint.x) * amount,
+      y: active.filteredPoint.y + (rawPoint.y - active.filteredPoint.y) * amount,
+    };
+    active.filteredPoint = point;
     const distance = Math.hypot(
       (point.x - active.lastPoint.x) * mapState.width,
       (point.y - active.lastPoint.y) * mapState.height,
     );
-    if (distance < 1.25) return;
+    if (distance < 1.15) return;
 
-    const context = canvasRef.current?.getContext("2d");
+    const context = getPreviewContext();
     if (!context) return;
     if (active.stroke.points.length < 5000) active.stroke.points.push(point);
     paintBrushSegment(
@@ -257,12 +354,12 @@ export default function WorldMapCanvas2D({
       x: point.x,
       y: point.y,
       size,
-      rotation: 0,
+      rotation: Math.random() * 360,
     };
     const existing = [...(mapState.stamps || []), ...active.stamps];
     if (overlapsExistingStamp(stamp, existing, mapState, textures, images)) return false;
     active.stamps.push(stamp);
-    const context = canvasRef.current?.getContext("2d");
+    const context = getPreviewContext();
     if (context) drawMapStamp(context, mapState, images, stamp);
     return true;
   };
@@ -270,7 +367,7 @@ export default function WorldMapCanvas2D({
   const appendScatterPoint = (event) => {
     const active = pointerRef.current;
     if (active.mode !== "scatter" || active.pointerId !== event.pointerId) return;
-    const point = getMapPoint(event);
+    const point = readMapPoint(event);
     if (!point) return;
     const distance = Math.hypot(
       (point.x - active.lastPoint.x) * mapState.width,
@@ -297,10 +394,39 @@ export default function WorldMapCanvas2D({
   const finishPointer = (event) => {
     const active = pointerRef.current;
     if (!active.mode || active.pointerId !== event.pointerId) return;
-    appendPointerPoint(event);
+    if (active.mode === "pan") {
+      pointerRef.current = { mode: null };
+      return;
+    }
+    if (active.mode === "brush") {
+      const endpoint = readMapPoint(event);
+      const distance = endpoint ? Math.hypot(
+        (endpoint.x - active.lastPoint.x) * mapState.width,
+        (endpoint.y - active.lastPoint.y) * mapState.height,
+      ) : 0;
+      if (endpoint && distance > 0.5) {
+        if (active.stroke.points.length < 5000) active.stroke.points.push(endpoint);
+        const context = getPreviewContext();
+        if (context) paintBrushSegment(
+          context,
+          mapState,
+          images,
+          active.stroke,
+          active.lastPoint,
+          endpoint,
+          active.patternCache,
+          active.forestBrushState,
+        );
+        active.lastPoint = endpoint;
+      }
+    } else {
+      appendPointerPoint(event);
+    }
     pointerRef.current = { mode: null };
     if (active.mode === "brush") onStrokeComplete?.(active.stroke);
     else if (active.mode === "scatter" && active.stamps.length) onStampsComplete?.(active.stamps);
+    const context = getPreviewContext();
+    context?.clearRect(0, 0, mapState.width, mapState.height);
   };
 
   const addCountryPoint = (point, clickCount) => {
@@ -325,7 +451,9 @@ export default function WorldMapCanvas2D({
 
   const handlePointerDown = (event) => {
     if (!editable) return;
-    const point = getMapPoint(event);
+    if (beginPan(event)) return;
+    if (event.target !== canvasRef.current) return;
+    const point = readMapPoint(event);
     if (!point) return;
 
     if (activeTool === "city") {
@@ -335,7 +463,7 @@ export default function WorldMapCanvas2D({
     }
     if (activeTool === "fill") {
       event.preventDefault();
-      onSetBaseTexture?.(selectedTextureId);
+      onSetBaseTexture?.(selectedTextureId, textureRotation);
       return;
     }
     if (activeTool === "select-country") {
@@ -356,13 +484,13 @@ export default function WorldMapCanvas2D({
         x: point.x,
         y: point.y,
         size: stampSize || selectedTexture?.defaultSize || 0.1,
-        rotation: 0,
+        rotation: stampRotation,
       });
       return;
     }
     if (activeTool === "scatter") {
       event.preventDefault();
-      event.currentTarget.setPointerCapture?.(event.pointerId);
+      stageRef.current?.setPointerCapture?.(event.pointerId);
       const active = { mode: "scatter", pointerId: event.pointerId, lastPoint: point, stamps: [] };
       pointerRef.current = active;
       addScatterStamp(active, point);
@@ -371,62 +499,118 @@ export default function WorldMapCanvas2D({
     if (activeTool !== "brush" && activeTool !== "erase" && activeTool !== "wall") return;
 
     event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    stageRef.current?.setPointerCapture?.(event.pointerId);
+    const isForest = activeTool === "brush" && (selectedTexture?.brushMode === "forest" || selectedTexture?.brushMode === "cluster");
     const stroke = {
       id: createObjectId("stroke"),
-      textureId: activeTool === "erase" ? mapState.baseTextureId : selectedTextureId,
+      textureId: activeTool === "erase"
+        ? mapState.baseTextureId
+        : activeTool === "wall" && selectedTexture?.brushMode !== "wall"
+          ? "wall-stone"
+          : selectedTextureId,
       size: brushSize,
       opacity: activeTool === "erase" ? 1 : brushOpacity,
+      smoothing: brushSmoothing,
+      textureRotation: activeTool === "erase" ? mapState.baseTextureRotation : textureRotation,
       erase: activeTool === "erase",
       kind: activeTool === "wall" ? "wall" : "brush",
-      ...(activeTool === "brush" && (selectedTexture?.brushMode === "forest" || selectedTexture?.brushMode === "cluster")
-        ? { forestDensity }
-        : {}),
+      ...(isForest ? { forestDensity } : {}),
       points: [point],
     };
-    pointerRef.current = {
+    const active = {
       mode: "brush",
       pointerId: event.pointerId,
       stroke,
       lastPoint: point,
+      filteredPoint: point,
       patternCache: new Map(),
-      forestBrushState: activeTool === "brush" && (selectedTexture?.brushMode === "forest" || selectedTexture?.brushMode === "cluster")
-        ? { occupancy: createForestOccupancyForMap(mapState, images) }
-        : {},
+      forestBrushState: isForest ? { occupancy: createForestOccupancyForMap(mapState, images) } : {},
     };
-    const context = canvasRef.current?.getContext("2d");
+    pointerRef.current = active;
+    const context = getPreviewContext();
     if (context) {
-      paintBrushSegment(
-        context,
-        mapState,
-        images,
-        stroke,
-        point,
-        point,
-        pointerRef.current.patternCache,
-        pointerRef.current.forestBrushState,
-      );
+      paintBrushSegment(context, mapState, images, stroke, point, point, active.patternCache, active.forestBrushState);
     }
   };
 
   const handlePointerMove = (event) => {
-    if (!pointerRef.current.mode || pointerRef.current.pointerId !== event.pointerId) return;
+    const active = pointerRef.current;
+    if (!active.mode || active.pointerId !== event.pointerId) return;
+    if (active.mode === "pan") {
+      onCameraChange?.({
+        zoom: camera.zoom,
+        rotation: camera.rotation,
+        panX: clampPan(active.startPanX + event.clientX - active.startX, window.innerWidth * 1.5),
+        panY: clampPan(active.startPanY + event.clientY - active.startY, window.innerHeight * 1.5),
+      });
+      return;
+    }
     const nativeEvent = event.nativeEvent;
     const coalesced = nativeEvent.getCoalescedEvents?.() || [];
     if (coalesced.length) coalesced.forEach(appendPointerPoint);
     else appendPointerPoint(event);
   };
 
-  return (
+  const handleWheel = (event) => {
+    if (!editable) return;
+    event.preventDefault();
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const nextZoom = Math.min(2.5, Math.max(0.3, camera.zoom * Math.exp(-event.deltaY * 0.0012)));
+    const cursorX = event.clientX - (rect.left + rect.width / 2);
+    const cursorY = event.clientY - (rect.top + rect.height / 2);
+    const dx = cursorX - camera.panX;
+    const dy = cursorY - camera.panY;
+    const angle = (camera.rotation * Math.PI) / 180;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const worldX = (cosine * dx + sine * dy) / camera.zoom;
+    const worldY = (-sine * dx + cosine * dy) / camera.zoom;
+    const scaledX = nextZoom * (cosine * worldX - sine * worldY);
+    const scaledY = nextZoom * (sine * worldX + cosine * worldY);
+    onCameraChange?.({
+      zoom: nextZoom,
+      rotation: camera.rotation,
+      panX: clampPan(cursorX - scaledX, window.innerWidth * 1.5),
+      panY: clampPan(cursorY - scaledY, window.innerHeight * 1.5),
+    });
+  };
+
+  const cameraStyle = {
+    width: `${mapState.width}px`,
+    height: `${mapState.height}px`,
+    left: `calc(50% + ${camera.panX}px)`,
+    top: `calc(50% + ${camera.panY}px)`,
+    transform: `translate(-50%, -50%) rotate(${camera.rotation}deg) scale(${camera.zoom})`,
+  };
+
+  const canvas = (
     <canvas
       ref={canvasRef}
       className={`world-map-canvas ${editable ? "world-map-canvas-editable" : ""}`}
-      style={{ width: `${mapState?.width * zoom || 0}px`, height: `${mapState?.height * zoom || 0}px` }}
+      style={!editable ? { width: `${mapState?.width || 0}px`, height: `${mapState?.height || 0}px` } : undefined}
       aria-label={`${mapState?.width || 0} на ${mapState?.height || 0} пикселей, карта мира`}
+    />
+  );
+
+  if (!editable) return canvas;
+
+  return (
+    <div
+      className="world-map-canvas-stage"
+      ref={stageRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointer}
       onPointerCancel={finishPointer}
-    />
+      onWheel={handleWheel}
+      onContextMenu={(event) => event.preventDefault()}
+      aria-label="Рабочая область карты: колесо — масштаб, пробел или правая кнопка — перемещение"
+    >
+      <div className="world-map-canvas-transform" style={cameraStyle}>
+        {canvas}
+        <canvas ref={previewCanvasRef} className="world-map-canvas-preview" aria-hidden="true" />
+      </div>
+    </div>
   );
 }

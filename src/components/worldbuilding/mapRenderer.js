@@ -24,38 +24,90 @@ function sourceCrop(image, texture) {
   ];
 }
 
-function makeTexturePattern(context, texture, image, scale) {
-  const tile = document.createElement("canvas");
-  tile.width = 128;
-  tile.height = 128;
-  const tileContext = tile.getContext("2d");
-  if (!tileContext) return null;
+function makeTextureMosaic(texture, image, mapState) {
+  const cellSize = 128;
+  const columns = Math.max(10, Math.ceil((mapState.width + cellSize) / cellSize));
+  const rows = Math.max(10, Math.ceil((mapState.height + cellSize) / cellSize));
+  const mosaic = document.createElement("canvas");
+  mosaic.width = columns * cellSize;
+  mosaic.height = rows * cellSize;
+  const mosaicContext = mosaic.getContext("2d");
+  if (!mosaicContext) return null;
 
-  if (image?.naturalWidth) {
-    try {
-      tileContext.drawImage(image, ...sourceCrop(image, texture), 0, 0, tile.width, tile.height);
-    } catch {
-      tileContext.fillStyle = FALLBACK_COLORS[texture.category] || FALLBACK_COLORS.земля;
-      tileContext.fillRect(0, 0, tile.width, tile.height);
+  const fallback = FALLBACK_COLORS[texture.category] || FALLBACK_COLORS.земля;
+  mosaicContext.fillStyle = fallback;
+  mosaicContext.fillRect(0, 0, mosaic.width, mosaic.height);
+  const random = createSeededRandom(hashString(`${texture.id}:${texture.src}:${texture.col}:${texture.row}`));
+  const crop = image?.naturalWidth ? sourceCrop(image, texture) : null;
+
+  // Scatter feathered texture fragments over the entire map instead of repeating square tiles.
+  if (image?.naturalWidth && crop) {
+    const patchSize = 192;
+    const patch = document.createElement("canvas");
+    patch.width = patchSize;
+    patch.height = patchSize;
+    const patchContext = patch.getContext("2d");
+    if (patchContext) {
+      try {
+        patchContext.drawImage(image, ...crop, 0, 0, patchSize, patchSize);
+        patchContext.globalCompositeOperation = "destination-in";
+        const feather = patchContext.createRadialGradient(
+          patchSize / 2,
+          patchSize / 2,
+          patchSize * 0.12,
+          patchSize / 2,
+          patchSize / 2,
+          patchSize * 0.5,
+        );
+        feather.addColorStop(0, "rgba(0, 0, 0, 1)");
+        feather.addColorStop(0.72, "rgba(0, 0, 0, 0.92)");
+        feather.addColorStop(1, "rgba(0, 0, 0, 0)");
+        patchContext.fillStyle = feather;
+        patchContext.fillRect(0, 0, patchSize, patchSize);
+        patchContext.globalCompositeOperation = "source-over";
+
+        const offsets = (center, size, extent) => {
+          const values = [0];
+          if (center - size / 2 < 0) values.push(extent);
+          if (center + size / 2 > extent) values.push(-extent);
+          return values;
+        };
+        const patchCount = Math.ceil((mosaic.width * mosaic.height / (1280 * 1280)) * 180);
+        for (let index = 0; index < patchCount; index += 1) {
+          const size = cellSize * (1.25 + random() * 1.45);
+          const centerX = random() * mosaic.width;
+          const centerY = random() * mosaic.height;
+          const angle = random() * Math.PI * 2;
+          const offsetX = offsets(centerX, size, mosaic.width);
+          const offsetY = offsets(centerY, size, mosaic.height);
+          for (const wrapX of offsetX) {
+            for (const wrapY of offsetY) {
+              mosaicContext.save();
+              mosaicContext.globalAlpha = 0.82;
+              mosaicContext.translate(centerX + wrapX, centerY + wrapY);
+              mosaicContext.rotate(angle);
+              mosaicContext.drawImage(patch, -size / 2, -size / 2, size, size);
+              mosaicContext.restore();
+            }
+          }
+        }
+      } catch {
+        mosaicContext.fillStyle = fallback;
+        mosaicContext.fillRect(0, 0, mosaic.width, mosaic.height);
+      }
     }
-  } else {
-    tileContext.fillStyle = FALLBACK_COLORS[texture.category] || FALLBACK_COLORS.земля;
-    tileContext.fillRect(0, 0, tile.width, tile.height);
   }
 
-  const pattern = context.createPattern(tile, "repeat");
-  if (pattern?.setTransform && typeof DOMMatrix !== "undefined") {
-    pattern.setTransform(new DOMMatrix([scale, 0, 0, scale, 0, 0]));
-  }
-  return pattern;
+  return mosaic;
 }
 
 function toPixels(points, width, height) {
   return points.map((point) => ({ x: point.x * width, y: point.y * height }));
 }
 
-function traceSmoothPath(context, points, width, height, close = false) {
+function traceSmoothPath(context, points, width, height, close = false, smoothing = 0.72) {
   const pixels = toPixels(points, width, height);
+  const amount = Math.min(1, Math.max(0, Number(smoothing) || 0));
   context.beginPath();
   if (pixels.length === 0) return pixels;
   if (pixels.length === 1) {
@@ -63,68 +115,100 @@ function traceSmoothPath(context, points, width, height, close = false) {
     return pixels;
   }
 
-  if (close && pixels.length > 2) {
-    const first = pixels[0];
-    const last = pixels[pixels.length - 1];
-    context.moveTo((first.x + last.x) / 2, (first.y + last.y) / 2);
-    for (let index = 0; index < pixels.length; index += 1) {
-      const current = pixels[index];
-      const next = pixels[(index + 1) % pixels.length];
-      context.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+  context.moveTo(pixels[0].x, pixels[0].y);
+  if (pixels.length === 2 || amount === 0) {
+    for (let index = 1; index < pixels.length; index += 1) {
+      context.lineTo(pixels[index].x, pixels[index].y);
     }
-    context.closePath();
+    if (close) context.closePath();
     return pixels;
   }
 
-  context.moveTo(pixels[0].x, pixels[0].y);
-  if (pixels.length === 2) {
-    context.lineTo(pixels[1].x, pixels[1].y);
-    return pixels;
+  const segmentCount = close ? pixels.length : pixels.length - 1;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const firstIndex = index;
+    const secondIndex = (index + 1) % pixels.length;
+    const previousIndex = close
+      ? (index - 1 + pixels.length) % pixels.length
+      : Math.max(0, index - 1);
+    const nextIndex = close
+      ? (index + 2) % pixels.length
+      : Math.min(pixels.length - 1, index + 2);
+    const previous = pixels[previousIndex];
+    const first = pixels[firstIndex];
+    const second = pixels[secondIndex];
+    const next = pixels[nextIndex];
+    const tangent = amount / 6;
+    context.bezierCurveTo(
+      first.x + (second.x - previous.x) * tangent,
+      first.y + (second.y - previous.y) * tangent,
+      second.x - (next.x - first.x) * tangent,
+      second.y - (next.y - first.y) * tangent,
+      second.x,
+      second.y,
+    );
   }
-  for (let index = 1; index < pixels.length - 1; index += 1) {
-    const current = pixels[index];
-    const next = pixels[index + 1];
-    context.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
-  }
-  const last = pixels[pixels.length - 1];
-  context.lineTo(last.x, last.y);
+  if (close) context.closePath();
   return pixels;
 }
 
-function getPattern(context, textureId, mapState, images, cache, scale) {
+function getPattern(context, textureId, mapState, images, cache, rotation = 0) {
   const texture = getMapTexture(textureId, mapState.textures || []);
-  const key = `${texture.id}:${texture.src}:${texture.sourceType}:${texture.col}:${texture.row}:${scale}`;
+  const normalizedRotation = ((Number(rotation) || 0) % 360 + 360) % 360;
+  const key = `${texture.id}:${texture.src}:${texture.sourceType}:${texture.col}:${texture.row}:${mapState.width}x${mapState.height}`;
   if (!cache.has(key)) {
-    if (cache.size >= 192) cache.delete(cache.keys().next().value);
-    cache.set(key, makeTexturePattern(context, texture, images?.[texture.src], scale));
+    if (cache.size >= 10) cache.delete(cache.keys().next().value);
+    cache.set(key, {
+      mosaic: makeTextureMosaic(texture, images?.[texture.src], mapState),
+      patterns: new Map(),
+    });
   }
-  return cache.get(key) || null;
+  const entry = cache.get(key);
+  if (!entry?.mosaic) return null;
+  if (!entry.patterns.has(normalizedRotation)) {
+    const pattern = context.createPattern(entry.mosaic, "repeat");
+    if (pattern?.setTransform && typeof DOMMatrix !== "undefined") {
+      const angle = (normalizedRotation * Math.PI) / 180;
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      pattern.setTransform(new DOMMatrix([cosine, sine, -sine, cosine, 0, 0]));
+    }
+    entry.patterns.set(normalizedRotation, pattern);
+  }
+  return entry.patterns.get(normalizedRotation) || null;
 }
 
-function drawWallPath(context, points, width, height, lineWidth) {
+function drawWallPath(context, mapState, images, stroke, points, patternCache = new Map()) {
+  const lineWidth = Math.max(8, (Number(stroke.size) || 0.06) * mapState.height);
+  const pattern = getPattern(
+    context,
+    stroke.textureId || "wall-stone",
+    mapState,
+    images,
+    patternCache,
+    stroke.textureRotation || 0,
+  );
   context.save();
   context.lineCap = "round";
   context.lineJoin = "round";
-  traceSmoothPath(context, points, width, height);
-  context.strokeStyle = "#342d25";
-  context.lineWidth = lineWidth * 1.22;
+  traceSmoothPath(context, points, mapState.width, mapState.height, false, stroke.smoothing);
+  context.strokeStyle = "rgba(35, 32, 27, 0.92)";
+  context.lineWidth = lineWidth * 1.16;
   context.stroke();
-  context.strokeStyle = "#8e8069";
-  context.lineWidth = lineWidth * 0.88;
+  context.strokeStyle = pattern || "#827d6c";
+  context.lineWidth = lineWidth * 0.9;
   context.stroke();
-  context.setLineDash([Math.max(5, lineWidth * 0.48), Math.max(2, lineWidth * 0.1)]);
-  context.lineDashOffset = 0;
-  context.strokeStyle = "#c2b28e";
-  context.lineWidth = Math.max(2, lineWidth * 0.18);
+  context.strokeStyle = "rgba(239, 221, 176, 0.66)";
+  context.lineWidth = Math.max(1.5, lineWidth * 0.075);
   context.stroke();
   context.restore();
 }
 
-export function paintWallSegment(context, mapState, stroke, from, to) {
+export function paintWallSegment(context, mapState, stroke, from, to, images, patternCache) {
   const points = from.x === to.x && from.y === to.y ? [from] : [from, to];
   context.save();
   context.globalAlpha = Math.min(1, Math.max(0.1, Number(stroke.opacity) || 1));
-  drawWallPath(context, points, mapState.width, mapState.height, Math.max(8, stroke.size * mapState.height));
+  drawWallPath(context, mapState, images, stroke, points, patternCache);
   context.restore();
 }
 
@@ -385,7 +469,7 @@ export function createForestOccupancyForMap(mapState, images) {
 
 export function paintBrushSegment(context, mapState, images, stroke, from, to, cache, brushState) {
   if (stroke.kind === "wall") {
-    paintWallSegment(context, mapState, stroke, from, to);
+    paintWallSegment(context, mapState, stroke, from, to, images, cache);
     return;
   }
   const textureId = stroke.erase ? mapState.baseTextureId : stroke.textureId;
@@ -403,7 +487,7 @@ export function paintBrushSegment(context, mapState, images, stroke, from, to, c
     mapState,
     images,
     cache,
-    stroke.erase ? 0.66 : Math.min(0.9, Math.max(0.22, (Number(stroke.size) || 0.05) * 5.4)),
+    stroke.erase ? mapState.baseTextureRotation : stroke.textureRotation,
   );
   const lineWidth = Math.max(2, (Number(stroke.size) || 0.05) * mapState.height);
   context.save();
@@ -512,9 +596,14 @@ export function renderMapCanvas(
 ) {
   const { width, height } = mapState;
   const baseTexture = getMapTexture(mapState.baseTextureId, mapState.textures || []);
-  const basePattern = baseTexture.brushMode === "forest"
-    ? null
-    : getPattern(context, mapState.baseTextureId, mapState, images, patternCache, 0.66);
+  const basePattern = getPattern(
+    context,
+    mapState.baseTextureId,
+    mapState,
+    images,
+    patternCache,
+    mapState.baseTextureRotation,
+  );
   context.save();
   context.globalAlpha = 1;
   context.fillStyle = FALLBACK_COLORS[baseTexture.category] || FALLBACK_COLORS.земля;
@@ -531,7 +620,7 @@ export function renderMapCanvas(
     if (stroke.kind === "wall") {
       context.save();
       context.globalAlpha = Math.min(1, Math.max(0.1, Number(stroke.opacity) || 1));
-      drawWallPath(context, stroke.points, width, height, Math.max(8, stroke.size * height));
+      drawWallPath(context, mapState, images, stroke, stroke.points, patternCache);
       context.restore();
       continue;
     }
@@ -547,7 +636,7 @@ export function renderMapCanvas(
       mapState,
       images,
       patternCache,
-      stroke.erase ? 0.66 : Math.min(0.9, Math.max(0.22, (Number(stroke.size) || 0.05) * 5.4)),
+      stroke.erase ? mapState.baseTextureRotation : stroke.textureRotation,
     );
     const lineWidth = Math.max(2, (Number(stroke.size) || 0.05) * height);
     context.save();
@@ -562,7 +651,7 @@ export function renderMapCanvas(
       context.arc(stroke.points[0].x * width, stroke.points[0].y * height, Math.max(1, lineWidth / 2), 0, Math.PI * 2);
       context.fill();
     } else {
-      traceSmoothPath(context, stroke.points, width, height);
+      traceSmoothPath(context, stroke.points, width, height, false, stroke.smoothing);
       context.stroke();
     }
     context.restore();
@@ -573,6 +662,67 @@ export function renderMapCanvas(
     drawCountry(context, mapState, country, country.id === selectedCountryId);
   }
   if (includeCities) mapState.cities.forEach((city) => drawCity(context, city, width, height));
+}
+
+function applySculptStrokes(context, strokes) {
+  if (!strokes?.length) return;
+  const width = context.canvas.width;
+  const height = context.canvas.height;
+  const image = context.getImageData(0, 0, width, height);
+  const { data } = image;
+
+  for (const stroke of strokes) {
+    const points = (stroke.points || []).map((point) => ({
+      x: point.x * width,
+      y: point.y * height,
+    }));
+    if (!points.length) continue;
+    const radius = Math.max(2, (Number(stroke.size) || 0.05) * height);
+    const direction = stroke.mode === "lower" ? -1 : 1;
+    const delta = direction * Math.min(0.18, Math.max(0.005, Number(stroke.strength) || 0.04)) * 255;
+    const weights = new Float32Array(width * height);
+    const segmentCount = Math.max(1, points.length - 1);
+
+    for (let segmentIndex = 0; segmentIndex < segmentCount; segmentIndex += 1) {
+      const start = points[segmentIndex];
+      const end = points[Math.min(segmentIndex + 1, points.length - 1)];
+      const segmentX = end.x - start.x;
+      const segmentY = end.y - start.y;
+      const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+      const left = Math.max(0, Math.floor(Math.min(start.x, end.x) - radius));
+      const right = Math.min(width - 1, Math.ceil(Math.max(start.x, end.x) + radius));
+      const top = Math.max(0, Math.floor(Math.min(start.y, end.y) - radius));
+      const bottom = Math.min(height - 1, Math.ceil(Math.max(start.y, end.y) + radius));
+
+      for (let y = top; y <= bottom; y += 1) {
+        for (let x = left; x <= right; x += 1) {
+          const amount = lengthSquared
+            ? Math.min(1, Math.max(0, ((x - start.x) * segmentX + (y - start.y) * segmentY) / lengthSquared))
+            : 0;
+          const nearestX = start.x + amount * segmentX;
+          const nearestY = start.y + amount * segmentY;
+          const distance = Math.hypot(x - nearestX, y - nearestY);
+          if (distance >= radius) continue;
+          const edge = 1 - distance / radius;
+          const weight = edge * edge * (3 - 2 * edge);
+          const index = y * width + x;
+          if (weight > weights[index]) weights[index] = weight;
+        }
+      }
+    }
+
+    for (let index = 0; index < weights.length; index += 1) {
+      const weight = weights[index];
+      if (!weight) continue;
+      const channel = index * 4;
+      const gray = Math.min(250, Math.max(8, data[channel] + delta * weight));
+      data[channel] = gray;
+      data[channel + 1] = gray;
+      data[channel + 2] = gray;
+    }
+  }
+
+  context.putImageData(image, 0, 0);
 }
 
 export function renderHeightMap(context, mapState) {
@@ -597,7 +747,7 @@ export function renderHeightMap(context, mapState) {
       context.lineCap = "round";
       context.lineJoin = "round";
       context.lineWidth = Math.max(4, stroke.size * height * 0.78);
-      traceSmoothPath(context, stroke.points, width, height);
+      traceSmoothPath(context, stroke.points, width, height, false, stroke.smoothing);
       context.stroke();
     } else {
       const strokeWidth = texture.brushMode === "cluster" || texture.brushMode === "forest"
@@ -611,7 +761,7 @@ export function renderHeightMap(context, mapState) {
         context.arc(stroke.points[0].x * width, stroke.points[0].y * height, Math.max(1, strokeWidth / 2), 0, Math.PI * 2);
         context.fill();
       } else {
-        traceSmoothPath(context, stroke.points, width, height);
+        traceSmoothPath(context, stroke.points, width, height, false, stroke.smoothing);
         context.stroke();
       }
     }
@@ -634,6 +784,8 @@ export function renderHeightMap(context, mapState) {
     );
     context.fill();
   }
+
+  applySculptStrokes(context, mapState.heightStrokes || []);
 }
 
 function drawCity(context, city, width, height) {

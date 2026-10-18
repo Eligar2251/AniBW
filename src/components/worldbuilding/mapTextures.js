@@ -49,6 +49,15 @@ export const DEFAULT_MAP_TEXTURES = [
   terrain("shallow-water", "Мелководье", "shallow-water", -0.12, "вода"),
   terrain("shore", "Берег", "shore", -0.01, "вода"),
   terrain("stone", "Камни", "stone", 0.17),
+  {
+    id: "wall-stone",
+    label: "Каменная стена",
+    src: "/assets/world-map/textures/stone.png",
+    sourceType: "image",
+    elevation: 0.48,
+    category: "стена",
+    brushMode: "wall",
+  },
   forestTerrain("forest", "Лес", "forest", 0.23, 0.82, FOREST_TREE_VARIANTS),
   forestTerrain("dense-forest", "Густой лес", "dense-forest", 0.31, 1, ["tree", "kenney-tree-03"]),
   forestTerrain("mixed-forest", "Смешанный лес · Kenney", "medieval-forest", 0.27, 0.92, ["tree", "kenney-tree-01", "kenney-tree-02", "kenney-tree-03"]),
@@ -58,11 +67,11 @@ export const DEFAULT_MAP_TEXTURES = [
   terrain("city-ground", "Каменная площадь", "city-ground", 0.25, "город"),
   terrain("castle-ground", "Замковый двор", "castle-ground", 0.62, "город"),
   {
-    ...objectStamp("village", "Посёлок", "city-stamp", 0.2, 0.16),
+    ...objectStamp("village", "Посёлок", "city-stamp", 0.2, 0.22),
     category: "город",
   },
-  objectStamp("city", "Город", "city-stamp", 0.25, 0.22),
-  objectStamp("castle", "Замок", "castle-stamp", 0.62, 0.2),
+  objectStamp("city", "Город", "city-stamp", 0.25, 0.3),
+  objectStamp("castle", "Замок", "castle-stamp", 0.62, 0.26),
   terrain("wheat", "Пшеничное поле", "wheat", 0.08),
   {
     ...objectStamp("tree", "Одиночное дерево", "pine-tree-stamp", 0.31, 0.08, "scatter"),
@@ -108,11 +117,13 @@ const starterStroke = (id, textureId, size, points, opacity = 1) => ({
 
 export function createStarterMapState() {
   return {
-    version: 3,
+    version: 4,
     width: DEFAULT_MAP_WIDTH,
     height: DEFAULT_MAP_HEIGHT,
     baseTextureId: "grass",
+    baseTextureRotation: 0,
     textures: [],
+    heightStrokes: [],
     strokes: [
       starterStroke("starter-ocean", "deep-water", 0.58, [[0.99, -0.05], [0.95, 0.18], [0.98, 0.43], [0.92, 0.68], [0.96, 1.05]]),
       starterStroke("starter-shallows", "shallow-water", 0.27, [[0.79, -0.04], [0.77, 0.22], [0.82, 0.45], [0.76, 0.73], [0.78, 1.04]]),
@@ -126,14 +137,14 @@ export function createStarterMapState() {
       starterStroke("starter-fields", "wheat", 0.15, [[0.4, 0.79], [0.46, 0.82], [0.48, 0.75]]),
     ],
     stamps: [
-      { id: "starter-castle-stamp", textureId: "castle", x: 0.3, y: 0.34, size: 0.2, rotation: 0 },
-      { id: "starter-town-stamp", textureId: "city", x: 0.5, y: 0.56, size: 0.22, rotation: 0 },
-      { id: "starter-village-stamp", textureId: "village", x: 0.2, y: 0.68, size: 0.16, rotation: 0 },
+      { id: "starter-castle-stamp", textureId: "castle", x: 0.3, y: 0.34, size: 0.26, rotation: 0 },
+      { id: "starter-town-stamp", textureId: "city", x: 0.5, y: 0.56, size: 0.3, rotation: 0 },
+      { id: "starter-village-stamp", textureId: "village", x: 0.2, y: 0.68, size: 0.22, rotation: 0 },
     ],
     countries: [],
     cities: [
-      { id: "starter-city-elden", name: "Эльден", x: 0.5, y: 0.56, type: "city" },
-      { id: "starter-village-wood", name: "Лесной Предел", x: 0.2, y: 0.68, type: "village" },
+      { id: "starter-city-elden", stampId: "starter-town-stamp", name: "Эльден", x: 0.5, y: 0.56, type: "city" },
+      { id: "starter-village-wood", stampId: "starter-village-stamp", name: "Лесной Предел", x: 0.2, y: 0.68, type: "village" },
     ],
   };
 }
@@ -166,6 +177,7 @@ function normalizeCities(cities, width, height, legacy = false) {
         x: Math.min(1, Math.max(0, legacy ? (x + 0.5) / width : x)),
         y: Math.min(1, Math.max(0, legacy ? (y + 0.5) / height : y)),
         type: city.type === "village" ? "village" : "city",
+        ...(typeof city.stampId === "string" ? { stampId: city.stampId } : {}),
       };
     });
 }
@@ -184,6 +196,35 @@ function normalizeStamps(stamps) {
       rotation: Math.min(360, Math.max(-360, Number(stamp.rotation) || 0)),
       opacity: Math.min(1, Math.max(0.05, Number(stamp.opacity) || 1)),
     }));
+}
+
+function normalizeHeightStrokes(heightStrokes) {
+  if (!Array.isArray(heightStrokes)) return [];
+  let remainingPoints = 50_000;
+  return heightStrokes
+    .filter((stroke) => stroke && Array.isArray(stroke.points))
+    .slice(-1000)
+    .map((stroke, index) => {
+      const points = stroke.points
+        .slice(0, Math.min(5000, remainingPoints))
+        .filter((point) => point && Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)))
+        .map((point) => ({
+          x: Math.min(1, Math.max(0, Number(point.x))),
+          y: Math.min(1, Math.max(0, Number(point.y))),
+        }));
+      remainingPoints -= points.length;
+      return {
+        id: String(stroke.id || `height-${index}`),
+        mode: stroke.mode === "lower" ? "lower" : "raise",
+        size: Math.min(0.3, Math.max(0.006, Number(stroke.size) || 0.05)),
+        strength: Math.min(0.18, Math.max(0.005, Number(stroke.strength) || 0.04)),
+        smoothing: Number.isFinite(Number(stroke.smoothing))
+          ? Math.min(1, Math.max(0, Number(stroke.smoothing)))
+          : 0.72,
+        points,
+      };
+    })
+    .filter((stroke) => stroke.points.length > 0);
 }
 
 function normalizeCountries(countries) {
@@ -243,11 +284,13 @@ function convertLegacyGrid(value, textures) {
     });
   });
   return {
-    version: 3,
+    version: 4,
     width: DEFAULT_MAP_WIDTH,
     height: DEFAULT_MAP_HEIGHT,
     baseTextureId: "grass",
+    baseTextureRotation: 0,
     textures,
+    heightStrokes: [],
     strokes,
     stamps,
     countries: [],
@@ -310,6 +353,12 @@ export function normalizeMapState(value) {
         opacity: Math.min(1, Math.max(0.05, Number(stroke.opacity) || 1)),
         kind: stroke.kind === "wall" ? "wall" : "brush",
         erase: Boolean(stroke.erase),
+        smoothing: Number.isFinite(Number(stroke.smoothing))
+          ? Math.min(1, Math.max(0, Number(stroke.smoothing)))
+          : 0.72,
+        textureRotation: Number.isFinite(Number(stroke.textureRotation))
+          ? ((Number(stroke.textureRotation) % 360) + 360) % 360
+          : 0,
         ...(Number.isFinite(Number(stroke.forestDensity))
           ? { forestDensity: Math.min(1, Math.max(0.65, Number(stroke.forestDensity))) }
           : {}),
@@ -319,11 +368,15 @@ export function normalizeMapState(value) {
     .filter((stroke) => stroke.points.length > 0);
 
   return {
-    version: 3,
+    version: 4,
     width,
     height,
     baseTextureId: typeof value.baseTextureId === "string" ? value.baseTextureId : "grass",
+    baseTextureRotation: Number.isFinite(Number(value.baseTextureRotation))
+      ? ((Number(value.baseTextureRotation) % 360) + 360) % 360
+      : 0,
     textures,
+    heightStrokes: normalizeHeightStrokes(value.heightStrokes),
     strokes,
     stamps: normalizeStamps(stampsToNormalize),
     countries: normalizeCountries(value.countries),
