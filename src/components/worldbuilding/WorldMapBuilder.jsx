@@ -465,7 +465,14 @@ function MapBuilderEditor({ workId, settings }) {
         {(tool === "brush" || tool === "erase" || tool === "wall") && (
           <div className={styles.brushControls}>
             <label className={styles.brushControl}>
-              <span>{tool === "wall" ? "Толщина стены" : "Размер кисти"} <b>{Math.round(brushSize * mapState.height)} px</b></span>
+              <span>
+                {tool === "wall" ? "Толщина стены" : selectedTexture?.brushMode === "cluster" ? "Размер лесной группы" : "Размер кисти"}
+                <b>
+                  {Math.round(selectedTexture?.brushMode === "cluster" && tool !== "wall"
+                    ? Math.max(56, Math.min(240, brushSize * mapState.height * 2.15))
+                    : brushSize * mapState.height)} px
+                </b>
+              </span>
               <input
                 type="range"
                 min="0.005"
@@ -473,7 +480,7 @@ function MapBuilderEditor({ workId, settings }) {
                 step="0.005"
                 value={brushSize}
                 onChange={(event) => setBrushSize(Number(event.target.value))}
-                aria-label="Размер кисти"
+                aria-label={tool === "wall" ? "Толщина стены" : selectedTexture?.brushMode === "cluster" ? "Размер лесной группы" : "Размер кисти"}
               />
             </label>
             {(tool === "brush" || tool === "wall") && (
@@ -638,7 +645,7 @@ function MapBuilderEditor({ workId, settings }) {
           <div className={styles.mapFooter}>
             <span>{mapState.width} × {mapState.height} px</span>
             <span>{mapState.strokes.length} мазков · {(mapState.stamps || []).length} объектов · {(mapState.countries || []).length} стран · {mapState.cities.length} меток</span>
-            <span><CircleHelp size={13} /> Кисть и стены — протяжка · города/замки — один щелчок · деревья — протяжка без наложений · границы — точки, затем Enter · 3D — тяните для вращения</span>
+            <span><CircleHelp size={13} /> Лес — протяжка PNG-группами без квадратных швов · стены — протяжка · города/замки — один щелчок · одиночные деревья — протяжка без наложений · границы — точки, затем Enter · 3D — тяните для вращения</span>
           </div>
         </main>
 
@@ -656,7 +663,9 @@ function MapBuilderEditor({ workId, settings }) {
                 type="button"
                 className={`${styles.textureButton} ${selectedTextureId === texture.id ? styles.textureSelected : ""}`}
                 onClick={() => selectTexture(texture)}
-                title={texture.label}
+                title={texture.brushMode === "cluster"
+                  ? `${texture.label}: PNG-группы деревьев накладываются вдоль свободного штриха`
+                  : texture.label}
                 aria-pressed={selectedTextureId === texture.id}
               >
                 <span

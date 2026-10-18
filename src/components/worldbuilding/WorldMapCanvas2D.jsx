@@ -28,7 +28,9 @@ function getStampRadius(stamp, mapState, textures, images) {
   const aspect = image?.naturalWidth && image?.naturalHeight ? image.naturalWidth / image.naturalHeight : 1;
   const stampHeight = Math.max(10, (Number(stamp.size) || texture.defaultSize || 0.08) * mapState.height);
   const stampWidth = stampHeight * aspect;
-  return Math.hypot(stampWidth, stampHeight) / 2;
+  return texture.footprint === "round"
+    ? Math.max(stampWidth, stampHeight) / 2
+    : Math.hypot(stampWidth, stampHeight) / 2;
 }
 
 function overlapsExistingStamp(candidate, existing, mapState, textures, images) {
@@ -221,6 +223,7 @@ export default function WorldMapCanvas2D({
       active.lastPoint,
       point,
       active.patternCache,
+      active.forestBrushState,
     );
     active.lastPoint = point;
   };
@@ -363,9 +366,21 @@ export default function WorldMapCanvas2D({
       stroke,
       lastPoint: point,
       patternCache: new Map(),
+      forestBrushState: {},
     };
     const context = canvasRef.current?.getContext("2d");
-    if (context) paintBrushSegment(context, mapState, images, stroke, point, point, pointerRef.current.patternCache);
+    if (context) {
+      paintBrushSegment(
+        context,
+        mapState,
+        images,
+        stroke,
+        point,
+        point,
+        pointerRef.current.patternCache,
+        pointerRef.current.forestBrushState,
+      );
+    }
   };
 
   const handlePointerMove = (event) => {

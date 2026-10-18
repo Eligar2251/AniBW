@@ -8,13 +8,15 @@ export const MAP_CANVAS_PRESETS = [
 ];
 export const MAP_SIZE_PRESETS = MAP_CANVAS_PRESETS;
 
-const terrain = (id, label, image, elevation, category = "земля") => ({
+const terrain = (id, label, image, elevation, category = "земля", brushMode = "pattern", brushSpacing) => ({
   id,
   label,
   src: `/assets/world-map/textures/${image}.png`,
   sourceType: "image",
   elevation,
   category,
+  brushMode,
+  ...(brushSpacing ? { brushSpacing } : {}),
 });
 
 const objectStamp = (id, label, image, elevation, defaultSize, placement = "stamp") => ({
@@ -37,8 +39,9 @@ export const DEFAULT_MAP_TEXTURES = [
   terrain("shallow-water", "Мелководье", "shallow-water", -0.12, "вода"),
   terrain("shore", "Берег", "shore", -0.01, "вода"),
   terrain("stone", "Камни", "stone", 0.17),
-  terrain("forest", "Редкий лес", "forest", 0.23, "лес"),
-  terrain("dense-forest", "Хвойный лес", "dense-forest", 0.31, "лес"),
+  terrain("forest", "Редкий лес", "forest", 0.23, "лес", "cluster", 0.52),
+  terrain("dense-forest", "Хвойный лес", "dense-forest", 0.31, "лес", "cluster", 0.4),
+  terrain("mixed-forest", "Смешанный лес · Kenney", "medieval-forest", 0.27, "лес", "cluster", 0.44),
   terrain("foothills", "Предгорья", "foothills", 0.48, "горы"),
   terrain("mountain", "Снежные горы", "mountain", 0.88, "горы"),
   terrain("village-ground", "Деревенские угодья", "village-ground", 0.15),
@@ -54,7 +57,34 @@ export const DEFAULT_MAP_TEXTURES = [
   {
     ...objectStamp("tree", "Одиночное дерево", "pine-tree-stamp", 0.31, 0.08, "scatter"),
     category: "лес",
+    footprint: "round",
   },
+  {
+    ...objectStamp("kenney-tree-01", "Ель · Kenney 1", "kenney-rts-medieval/medievalEnvironment_01", 0.31, 0.1, "scatter"),
+    category: "лес",
+    footprint: "round",
+  },
+  {
+    ...objectStamp("kenney-tree-02", "Ель · Kenney 2", "kenney-rts-medieval/medievalEnvironment_02", 0.31, 0.085, "scatter"),
+    category: "лес",
+    footprint: "round",
+  },
+  {
+    ...objectStamp("kenney-tree-03", "Ель · Kenney 3", "kenney-rts-medieval/medievalEnvironment_03", 0.31, 0.12, "scatter"),
+    category: "лес",
+    footprint: "round",
+  },
+  {
+    ...objectStamp("kenney-bush", "Куст · Kenney", "kenney-rts-medieval/medievalEnvironment_12", 0.13, 0.075),
+    category: "лес",
+  },
+  {
+    ...objectStamp("kenney-berry-bush", "Ягодный куст · Kenney", "kenney-rts-medieval/medievalEnvironment_19", 0.13, 0.075),
+    category: "лес",
+  },
+  objectStamp("kenney-rocks", "Камни · Kenney", "kenney-rts-medieval/medievalEnvironment_09", 0.19, 0.08),
+  objectStamp("kenney-log", "Бревно · Kenney", "kenney-rts-medieval/medievalEnvironment_05", 0.02, 0.06),
+  objectStamp("kenney-campfire", "Костёр · Kenney", "kenney-rts-medieval/medievalEnvironment_20", 0.04, 0.07),
 ];
 
 const starterStroke = (id, textureId, size, points, opacity = 1) => ({
@@ -289,16 +319,18 @@ export function normalizeMapState(value) {
 }
 
 export function getMapTexture(textureId, customTextures = []) {
-  return (
-    customTextures.find((texture) => texture.id === textureId) ||
-    DEFAULT_MAP_TEXTURES.find((texture) => texture.id === textureId) ||
-    DEFAULT_MAP_TEXTURES[0]
-  );
+  const defaultTexture = DEFAULT_MAP_TEXTURES.find((texture) => texture.id === textureId);
+  const customTexture = customTextures.find((texture) => texture.id === textureId);
+  if (defaultTexture) return { ...defaultTexture, ...customTexture };
+  return customTexture || DEFAULT_MAP_TEXTURES[0];
 }
 
 export function getAllMapTextures(customTextures = []) {
   const customById = new Map(customTextures.map((texture) => [texture.id, texture]));
-  const defaults = DEFAULT_MAP_TEXTURES.map((texture) => customById.get(texture.id) || texture);
+  const defaults = DEFAULT_MAP_TEXTURES.map((texture) => ({
+    ...texture,
+    ...customById.get(texture.id),
+  }));
   const extraTextures = customTextures.filter(
     (texture) => !DEFAULT_MAP_TEXTURES.some((defaultTexture) => defaultTexture.id === texture.id),
   );
