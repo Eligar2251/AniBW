@@ -209,7 +209,7 @@
   height: 16px;
   background: rgba(240, 168, 48, 0.2);
   color: var(--color-amber);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   border-radius: 50%;
 }
@@ -393,7 +393,7 @@
 
 .timelineIndex {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
   color: var(--color-text-faint);
   letter-spacing: 0.1em;
 }
@@ -655,7 +655,7 @@
 
 .loreNum {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-accent);
   letter-spacing: 0.15em;
 }

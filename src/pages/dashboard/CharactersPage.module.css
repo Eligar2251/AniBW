@@ -183,7 +183,7 @@
   border: 1px solid rgba(240, 168, 48, 0.4);
   color: var(--color-amber);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   border-radius: var(--radius-sm);
@@ -252,7 +252,7 @@
 
 .cardOverlayBadge {
   font-family: var(--font-ui);
-  font-size: 9px;
+  font-size: 12px;
   padding: 1px 6px;
   border-radius: 999px;
   letter-spacing: 0.05em;

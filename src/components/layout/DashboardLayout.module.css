@@ -1,9 +1,22 @@
 /* src/components/layout/DashboardLayout.module.css */
 
 .root {
+  --color-text-secondary: #d7d4df;
+  --color-text-muted: #aaa6b8;
+  --color-text-faint: #827f94;
+  --color-border: rgba(240, 237, 232, 0.12);
+  --color-border-subtle: rgba(240, 237, 232, 0.08);
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-md: 1.2rem;
   display: flex;
   height: 100vh;
   overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.55;
   background: var(--color-bg);
   background-image: radial-gradient(
     circle,
@@ -116,7 +129,7 @@
 
 .profileRole {
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-accent);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -142,6 +155,7 @@
 .navItem {
   display: flex;
   align-items: center;
+  min-height: 44px;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
@@ -206,6 +220,7 @@
 .bottomItem {
   display: flex;
   align-items: center;
+  min-height: 44px;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
@@ -270,7 +285,7 @@
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
-  height: 48px;
+  min-height: 56px;
 }
 
 .topbarLeft {
@@ -362,7 +377,7 @@
   border-radius: 999px;
   color: #fff;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
 }

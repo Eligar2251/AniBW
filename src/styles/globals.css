@@ -3,13 +3,6 @@
 @import "./variables.css";
 @import "./animations.css";
 
-@font-face {
-  font-family: "Retronom Regular";
-  src: url("/fonts/Retronom-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-}
-
 *,
 *::before,
 *::after {

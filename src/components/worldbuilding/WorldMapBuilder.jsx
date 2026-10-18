@@ -95,6 +95,7 @@ function MapBuilderEditor({ workId, settings }) {
   const [tool, setTool] = useState("brush");
   const [brushSize, setBrushSize] = useState(0.055);
   const [brushOpacity, setBrushOpacity] = useState(1);
+  const [forestDensity, setForestDensity] = useState(0.92);
   const [stampSize, setStampSize] = useState(0.1);
   const [cityType, setCityType] = useState("city");
   const [selectedCountryId, setSelectedCountryId] = useState(null);
@@ -121,6 +122,7 @@ function MapBuilderEditor({ workId, settings }) {
     [mapState.textures],
   );
   const selectedTexture = textures.find((texture) => texture.id === selectedTextureId) || textures[0];
+  const isForestTexture = selectedTexture?.brushMode === "forest" || selectedTexture?.brushMode === "cluster";
 
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
@@ -251,6 +253,9 @@ function MapBuilderEditor({ workId, settings }) {
   const selectTexture = (texture) => {
     setSelectedTextureId(texture.id);
     setStampSize(texture.defaultSize || 0.08);
+    if (texture.brushMode === "forest" || texture.brushMode === "cluster") {
+      setForestDensity(texture.forestDensity || 0.92);
+    }
     if (texture.placement === "stamp") setTool("stamp");
     else if (texture.placement === "scatter") setTool("scatter");
     else if (tool === "stamp" || tool === "scatter") setTool("brush");
@@ -466,10 +471,10 @@ function MapBuilderEditor({ workId, settings }) {
           <div className={styles.brushControls}>
             <label className={styles.brushControl}>
               <span>
-                {tool === "wall" ? "Толщина стены" : selectedTexture?.brushMode === "cluster" ? "Размер лесной группы" : "Размер кисти"}
+                {tool === "wall" ? "Толщина стены" : isForestTexture ? "Ширина леса" : "Размер кисти"}
                 <b>
-                  {Math.round(selectedTexture?.brushMode === "cluster" && tool !== "wall"
-                    ? Math.max(56, Math.min(240, brushSize * mapState.height * 2.15))
+                  {Math.round(isForestTexture && tool !== "wall"
+                    ? Math.max(56, Math.min(340, brushSize * mapState.height * 2.15))
                     : brushSize * mapState.height)} px
                 </b>
               </span>
@@ -480,9 +485,23 @@ function MapBuilderEditor({ workId, settings }) {
                 step="0.005"
                 value={brushSize}
                 onChange={(event) => setBrushSize(Number(event.target.value))}
-                aria-label={tool === "wall" ? "Толщина стены" : selectedTexture?.brushMode === "cluster" ? "Размер лесной группы" : "Размер кисти"}
+                aria-label={tool === "wall" ? "Толщина стены" : isForestTexture ? "Ширина лесной кисти" : "Размер кисти"}
               />
             </label>
+            {tool === "brush" && isForestTexture && (
+              <label className={styles.brushControl}>
+                <span>Плотность леса <b>{Math.round(forestDensity * 100)}%</b></span>
+                <input
+                  type="range"
+                  min="0.65"
+                  max="1"
+                  step="0.01"
+                  value={forestDensity}
+                  onChange={(event) => setForestDensity(Number(event.target.value))}
+                  aria-label="Плотность леса"
+                />
+              </label>
+            )}
             {(tool === "brush" || tool === "wall") && (
               <label className={styles.brushControl}>
                 <span>Непрозрачность <b>{Math.round(brushOpacity * 100)}%</b></span>
@@ -623,6 +642,7 @@ function MapBuilderEditor({ workId, settings }) {
                 selectedTextureId={selectedTextureId}
                 brushSize={brushSize}
                 brushOpacity={brushOpacity}
+                forestDensity={forestDensity}
                 stampSize={stampSize}
                 selectedCountryId={selectedCountryId}
                 countryFinishSignal={countryFinishSignal}
@@ -663,8 +683,8 @@ function MapBuilderEditor({ workId, settings }) {
                 type="button"
                 className={`${styles.textureButton} ${selectedTextureId === texture.id ? styles.textureSelected : ""}`}
                 onClick={() => selectTexture(texture)}
-                title={texture.brushMode === "cluster"
-                  ? `${texture.label}: PNG-группы деревьев накладываются вдоль свободного штриха`
+                title={texture.brushMode === "forest" || texture.brushMode === "cluster"
+                  ? `${texture.label}: отдельные деревья рассаживаются вдоль свободного штриха без наложения`
                   : texture.label}
                 aria-pressed={selectedTextureId === texture.id}
               >

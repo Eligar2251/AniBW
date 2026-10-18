@@ -36,7 +36,7 @@ const FONT_OPTIONS = [
   { label: "Body", value: "var(--font-body)" },
   { label: "Mono", value: "var(--font-mono)" },
   { label: "Japanese", value: "var(--font-japanese)" },
-  { label: "Retronom Regular", value: "Retronom Regular, sans-serif" },
+  { label: "System Sans", value: "system-ui, sans-serif" },
   { label: "Georgia", value: "Georgia, serif" },
   { label: "Impact", value: "Impact, sans-serif" },
   { label: "Courier New", value: "Courier New, monospace" },

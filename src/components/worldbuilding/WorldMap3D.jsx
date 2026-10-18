@@ -167,7 +167,7 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
       return () => mount.replaceChildren();
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.setClearColor(0x0b1012, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = false;
@@ -266,6 +266,7 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
         );
       });
       if (loadingRef.current) loadingRef.current.hidden = true;
+      scheduleRender();
     }).catch(() => {
       if (!terrainGeometryAttached) {
         terrainGeometry?.dispose();
@@ -300,6 +301,17 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
     renderer.domElement.addEventListener("pointerdown", handlePointerDown);
     renderer.domElement.addEventListener("pointerup", handlePointerUp);
 
+    const scheduleRender = () => {
+      if (disposed || frameId) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        if (disposed) return;
+        controls.update();
+        renderer.render(scene, camera);
+      });
+    };
+    controls.addEventListener("change", scheduleRender);
+
     const resizeScene = () => {
       if (!renderer || disposed) return;
       const width = Math.max(1, mount.clientWidth);
@@ -307,27 +319,21 @@ export default function WorldMap3D({ mapState, markers = NO_MARKERS, onSelectMar
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      scheduleRender();
     };
     const resizeObserver = typeof ResizeObserver === "undefined"
       ? null
       : new ResizeObserver(resizeScene);
-
-    const animate = () => {
-      if (disposed) return;
-      frameId = window.requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    };
     if (resizeObserver) resizeObserver.observe(mount);
     else window.addEventListener("resize", resizeScene);
     resizeScene();
-    animate();
 
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frameId);
       resizeObserver?.disconnect();
       if (!resizeObserver) window.removeEventListener("resize", resizeScene);
+      controls.removeEventListener("change", scheduleRender);
       controls.dispose();
       renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);

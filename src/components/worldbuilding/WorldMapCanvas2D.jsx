@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAllMapTextures, getMapTexture } from "./mapTextures";
 import {
+  createForestOccupancyForMap,
   drawMapStamp,
   findCountryAtPoint,
   paintBrushSegment,
@@ -80,6 +81,7 @@ export default function WorldMapCanvas2D({
   selectedTextureId = "grass",
   brushSize = 0.06,
   brushOpacity = 1,
+  forestDensity = 0.92,
   stampSize,
   selectedCountryId = null,
   countryFinishSignal = 0,
@@ -100,6 +102,13 @@ export default function WorldMapCanvas2D({
   const cancelCountryRef = useRef(null);
   const finishSignalRef = useRef(countryFinishSignal);
   const cancelSignalRef = useRef(countryCancelSignal);
+  const patternCacheRef = useRef(new Map());
+  const pixelRatio = Math.min(
+    typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+    1.5,
+  );
+  const canvasWidth = mapState?.width ?? 0;
+  const canvasHeight = mapState?.height ?? 0;
   const [countryDraft, setCountryDraft] = useState([]);
   const [images, setImages] = useState({});
   const textures = useMemo(() => getAllMapTextures(customTextures), [customTextures]);
@@ -145,9 +154,13 @@ export default function WorldMapCanvas2D({
 
   useEffect(() => {
     let isCurrent = true;
+    patternCacheRef.current.clear();
     const sources = JSON.parse(textureSources);
     Promise.all(sources.map(loadImage)).then((loaded) => {
-      if (isCurrent) setImages(Object.fromEntries(loaded));
+      if (isCurrent) {
+        patternCacheRef.current.clear();
+        setImages(Object.fromEntries(loaded));
+      }
     });
     return () => {
       isCurrent = false;
@@ -156,21 +169,29 @@ export default function WorldMapCanvas2D({
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas || !canvasWidth || !canvasHeight) return;
+    const pixelWidth = Math.max(1, Math.round(canvasWidth * pixelRatio));
+    const pixelHeight = Math.max(1, Math.round(canvasHeight * pixelRatio));
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+      patternCacheRef.current.clear();
+    }
+  }, [canvasHeight, canvasWidth, pixelRatio]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
     if (!canvas || !mapState) return;
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.round(mapState.width * ratio));
-    canvas.height = Math.max(1, Math.round(mapState.height * ratio));
-    canvas.style.width = `${mapState.width * zoom}px`;
-    canvas.style.height = `${mapState.height * zoom}px`;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
     context.clearRect(0, 0, mapState.width, mapState.height);
-    renderMapCanvas(context, mapState, images, true, selectedCountryId);
+    renderMapCanvas(context, mapState, images, true, selectedCountryId, patternCacheRef.current);
     drawCountryDraft(context, mapState, countryDraft);
-  }, [countryDraft, images, mapState, selectedCountryId, zoom]);
+  }, [countryDraft, images, mapState, pixelRatio, selectedCountryId]);
 
   useEffect(() => {
     if (!editable || activeTool !== "country") return undefined;
@@ -358,6 +379,9 @@ export default function WorldMapCanvas2D({
       opacity: activeTool === "erase" ? 1 : brushOpacity,
       erase: activeTool === "erase",
       kind: activeTool === "wall" ? "wall" : "brush",
+      ...(activeTool === "brush" && (selectedTexture?.brushMode === "forest" || selectedTexture?.brushMode === "cluster")
+        ? { forestDensity }
+        : {}),
       points: [point],
     };
     pointerRef.current = {
@@ -366,7 +390,9 @@ export default function WorldMapCanvas2D({
       stroke,
       lastPoint: point,
       patternCache: new Map(),
-      forestBrushState: {},
+      forestBrushState: activeTool === "brush" && (selectedTexture?.brushMode === "forest" || selectedTexture?.brushMode === "cluster")
+        ? { occupancy: createForestOccupancyForMap(mapState, images) }
+        : {},
     };
     const context = canvasRef.current?.getContext("2d");
     if (context) {
@@ -395,6 +421,7 @@ export default function WorldMapCanvas2D({
     <canvas
       ref={canvasRef}
       className={`world-map-canvas ${editable ? "world-map-canvas-editable" : ""}`}
+      style={{ width: `${mapState?.width * zoom || 0}px`, height: `${mapState?.height * zoom || 0}px` }}
       aria-label={`${mapState?.width || 0} на ${mapState?.height || 0} пикселей, карта мира`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

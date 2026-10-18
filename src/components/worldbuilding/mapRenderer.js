@@ -95,6 +95,7 @@ function getPattern(context, textureId, mapState, images, cache, scale) {
   const texture = getMapTexture(textureId, mapState.textures || []);
   const key = `${texture.id}:${texture.src}:${texture.sourceType}:${texture.col}:${texture.row}:${scale}`;
   if (!cache.has(key)) {
+    if (cache.size >= 192) cache.delete(cache.keys().next().value);
     cache.set(key, makeTexturePattern(context, texture, images?.[texture.src], scale));
   }
   return cache.get(key) || null;
@@ -160,46 +161,130 @@ function createSeededRandom(seed) {
   };
 }
 
-function getForestDabMetrics(stroke, mapState, texture, index) {
-  const brushWidth = Math.max(2, (Number(stroke.size) || 0.05) * mapState.height);
-  const clusterSize = Math.max(56, Math.min(240, brushWidth * 2.15));
-  const random = createSeededRandom(hashString(`${stroke.id || stroke.textureId}:${index}`));
-  const spacing = Number(texture.brushSpacing) || 0.46;
+const FOREST_MIN_SPACING = 1.12;
+const FOREST_CELL_SIZE = 128;
+
+function getForestBrushMetrics(stroke, mapState, texture) {
+  const brushWidth = Math.max(56, Math.min(340, (Number(stroke.size) || 0.05) * mapState.height * 2.15));
+  const treeHeight = Math.max(
+    24,
+    Math.min((Number(texture.forestTreeSize) || 0.085) * mapState.height, brushWidth * 0.42),
+  );
+  const densityValue = Number(stroke.forestDensity ?? texture.forestDensity ?? 0.92);
+  const density = Math.min(1, Math.max(0.65, Number.isFinite(densityValue) ? densityValue : 0.92));
+  const rowSpacing = treeHeight * (FOREST_MIN_SPACING / density);
+  const laneCount = Math.max(1, Math.floor(Math.max(0, brushWidth - treeHeight) / rowSpacing) + 1);
+  const usedWidth = (laneCount - 1) * rowSpacing;
   return {
-    size: clusterSize * (0.92 + random() * 0.16),
-    rotation: random() * 360,
-    offsetAcross: (random() - 0.5) * clusterSize * 0.18,
-    offsetAlong: (random() - 0.5) * clusterSize * 0.08,
-    offsetX: (random() - 0.5) * clusterSize * 0.16,
-    offsetY: (random() - 0.5) * clusterSize * 0.16,
-    spacing: clusterSize * spacing * (0.92 + random() * 0.16),
+    brushWidth,
+    treeHeight,
+    rowSpacing,
+    laneCount,
+    firstLaneOffset: -usedWidth / 2,
+    stationSpacing: laneCount > 1 ? rowSpacing / 2 : rowSpacing,
   };
 }
 
-function drawForestDab(context, mapState, images, stroke, texture, point, from, to, index) {
-  const metrics = getForestDabMetrics(stroke, mapState, texture, index);
+function createForestOccupancy() {
+  return { cells: new Map(), cellSize: FOREST_CELL_SIZE, maxRadius: 0 };
+}
+
+function addForestOccupant(occupancy, x, y, radius) {
+  const cellX = Math.floor(x / occupancy.cellSize);
+  const cellY = Math.floor(y / occupancy.cellSize);
+  const key = `${cellX}:${cellY}`;
+  const cell = occupancy.cells.get(key) || [];
+  cell.push({ x, y, radius });
+  occupancy.cells.set(key, cell);
+  occupancy.maxRadius = Math.max(occupancy.maxRadius, radius);
+}
+
+function cloneForestOccupancy(occupancy) {
+  return {
+    cellSize: occupancy.cellSize,
+    maxRadius: occupancy.maxRadius,
+    cells: new Map([...occupancy.cells].map(([key, entries]) => [key, entries.map((entry) => ({ ...entry }))])),
+  };
+}
+
+function getStampRadiusPixels(mapState, images, texture, size) {
+  const image = images?.[texture.src];
+  const aspect = image?.naturalWidth && image?.naturalHeight
+    ? sourceCrop(image, texture)[2] / sourceCrop(image, texture)[3]
+    : 1;
+  return Math.max(10, Number(size) * mapState.height * Math.max(1, aspect)) / 2;
+}
+
+function seedForestOccupancyWithStamps(occupancy, mapState, images) {
+  for (const stamp of mapState.stamps || []) {
+    const texture = getMapTexture(stamp.textureId, mapState.textures || []);
+    const radius = getStampRadiusPixels(mapState, images, texture, stamp.size || texture.defaultSize || 0.08);
+    addForestOccupant(occupancy, stamp.x * mapState.width, stamp.y * mapState.height, radius);
+  }
+}
+
+function canPlaceForestTree(occupancy, x, y, radius) {
+  const cellSize = occupancy.cellSize;
+  const cellX = Math.floor(x / cellSize);
+  const cellY = Math.floor(y / cellSize);
+  const searchRange = Math.ceil((radius + occupancy.maxRadius + 2) / cellSize);
+  for (let offsetY = -searchRange; offsetY <= searchRange; offsetY += 1) {
+    for (let offsetX = -searchRange; offsetX <= searchRange; offsetX += 1) {
+      const neighbors = occupancy.cells.get(`${cellX + offsetX}:${cellY + offsetY}`);
+      if (!neighbors) continue;
+      for (const neighbor of neighbors) {
+        if (Math.hypot(neighbor.x - x, neighbor.y - y) < radius + neighbor.radius + 1) return false;
+      }
+    }
+  }
+  addForestOccupant(occupancy, x, y, radius);
+  return true;
+}
+
+function getForestTreeTextures(mapState, images, texture) {
+  const ids = Array.isArray(texture.forestTreeIds) && texture.forestTreeIds.length
+    ? texture.forestTreeIds
+    : ["tree"];
+  return ids
+    .map((id) => getMapTexture(id, mapState.textures || []))
+    .filter((treeTexture) => images?.[treeTexture.src]?.naturalWidth);
+}
+
+function drawForestStation(context, mapState, images, stroke, texture, point, from, to, stationIndex, state) {
+  const { metrics, treeTextures, occupancy } = state;
+  if (!treeTextures.length) return;
   const segmentX = (to.x - from.x) * mapState.width;
   const segmentY = (to.y - from.y) * mapState.height;
   const segmentLength = Math.hypot(segmentX, segmentY);
-  const tangentX = segmentLength ? segmentX / segmentLength : 0;
+  const tangentX = segmentLength ? segmentX / segmentLength : 1;
   const tangentY = segmentLength ? segmentY / segmentLength : 0;
   const normalX = -tangentY;
   const normalY = tangentX;
-  const centerX = point.x * mapState.width + (segmentLength
-    ? tangentX * metrics.offsetAlong + normalX * metrics.offsetAcross
-    : metrics.offsetX);
-  const centerY = point.y * mapState.height + (segmentLength
-    ? tangentY * metrics.offsetAlong + normalY * metrics.offsetAcross
-    : metrics.offsetY);
+  const laneParity = metrics.laneCount > 1 ? stationIndex % 2 : -1;
 
-  drawMapStamp(context, mapState, images, {
-    textureId: stroke.textureId,
-    x: centerX / mapState.width,
-    y: centerY / mapState.height,
-    size: metrics.size / mapState.height,
-    rotation: metrics.rotation,
-    opacity: stroke.opacity,
-  });
+  for (let lane = 0; lane < metrics.laneCount; lane += 1) {
+    if (laneParity >= 0 && lane % 2 !== laneParity) continue;
+    const random = createSeededRandom(hashString(`${stroke.id || stroke.textureId}:forest:${stationIndex}:${lane}`));
+    const treeTexture = treeTextures[Math.floor(random() * treeTextures.length)];
+    const size = (metrics.treeHeight / mapState.height) * (0.94 + random() * 0.08);
+    const radius = getStampRadiusPixels(mapState, images, treeTexture, size);
+    const alongJitter = (random() - 0.5) * metrics.treeHeight * 0.025;
+    const acrossJitter = (random() - 0.5) * metrics.treeHeight * 0.025;
+    const laneOffset = metrics.firstLaneOffset + lane * metrics.rowSpacing;
+    const centerX = point.x * mapState.width + tangentX * alongJitter + normalX * (laneOffset + acrossJitter);
+    const centerY = point.y * mapState.height + tangentY * alongJitter + normalY * (laneOffset + acrossJitter);
+    if (!canPlaceForestTree(occupancy, centerX, centerY, radius)) continue;
+    if (!context) continue;
+
+    drawMapStamp(context, mapState, images, {
+      textureId: treeTexture.id,
+      x: centerX / mapState.width,
+      y: centerY / mapState.height,
+      size,
+      rotation: random() * 360,
+      opacity: stroke.opacity,
+    });
+  }
 }
 
 function paintForestBrushSegment(context, mapState, images, stroke, from, to, brushState) {
@@ -210,10 +295,13 @@ function paintForestBrushSegment(context, mapState, images, stroke, from, to, br
   const segmentLength = Math.hypot(segmentX, segmentY);
 
   if (!state.initialized) {
-    drawForestDab(context, mapState, images, stroke, texture, from, from, to, 0);
+    state.metrics = getForestBrushMetrics(stroke, mapState, texture);
+    state.treeTextures = getForestTreeTextures(mapState, images, texture);
+    state.occupancy = state.occupancy || createForestOccupancy();
+    state.nextStationIndex = 1;
+    state.distanceUntilNext = state.metrics.stationSpacing;
+    drawForestStation(context, mapState, images, stroke, texture, from, from, to, 0, state);
     state.initialized = true;
-    state.nextDabIndex = 1;
-    state.distanceUntilNext = getForestDabMetrics(stroke, mapState, texture, 0).spacing;
   }
   if (segmentLength < 0.001) return;
 
@@ -225,17 +313,27 @@ function paintForestBrushSegment(context, mapState, images, stroke, from, to, br
       x: from.x + (to.x - from.x) * amount,
       y: from.y + (to.y - from.y) * amount,
     };
-    const dabIndex = state.nextDabIndex;
-    drawForestDab(context, mapState, images, stroke, texture, point, from, to, dabIndex);
-    state.nextDabIndex += 1;
-    state.distanceUntilNext = getForestDabMetrics(stroke, mapState, texture, dabIndex).spacing;
+    drawForestStation(
+      context,
+      mapState,
+      images,
+      stroke,
+      texture,
+      point,
+      from,
+      to,
+      state.nextStationIndex,
+      state,
+    );
+    state.nextStationIndex += 1;
+    state.distanceUntilNext = state.metrics.stationSpacing;
   }
   state.distanceUntilNext -= segmentLength - distanceAlongSegment;
 }
 
-function drawForestBrushStroke(context, mapState, images, stroke) {
+function drawForestBrushStroke(context, mapState, images, stroke, occupancy = createForestOccupancy()) {
   if (!stroke.points?.length) return;
-  const brushState = {};
+  const brushState = { occupancy };
   paintForestBrushSegment(context, mapState, images, stroke, stroke.points[0], stroke.points[0], brushState);
   for (let index = 1; index < stroke.points.length; index += 1) {
     paintForestBrushSegment(
@@ -250,6 +348,41 @@ function drawForestBrushStroke(context, mapState, images, stroke) {
   }
 }
 
+const forestOccupancyCache = new WeakMap();
+
+export function createForestOccupancyForMap(mapState, images) {
+  const strokes = Array.isArray(mapState.strokes) ? mapState.strokes : [];
+  const cached = forestOccupancyCache.get(strokes);
+  if (
+    cached?.images === images &&
+    cached.stamps === mapState.stamps &&
+    cached.textures === mapState.textures &&
+    cached.width === mapState.width &&
+    cached.height === mapState.height
+  ) {
+    return cloneForestOccupancy(cached.occupancy);
+  }
+
+  const occupancy = createForestOccupancy();
+  seedForestOccupancyWithStamps(occupancy, mapState, images);
+  for (const stroke of strokes) {
+    const texture = getMapTexture(stroke.textureId, mapState.textures || []);
+    if (stroke.kind !== "wall" && !stroke.erase && (texture.brushMode === "forest" || texture.brushMode === "cluster")) {
+      drawForestBrushStroke(null, mapState, images, stroke, occupancy);
+    }
+  }
+
+  forestOccupancyCache.set(strokes, {
+    images,
+    stamps: mapState.stamps,
+    textures: mapState.textures,
+    width: mapState.width,
+    height: mapState.height,
+    occupancy,
+  });
+  return cloneForestOccupancy(occupancy);
+}
+
 export function paintBrushSegment(context, mapState, images, stroke, from, to, cache, brushState) {
   if (stroke.kind === "wall") {
     paintWallSegment(context, mapState, stroke, from, to);
@@ -257,7 +390,7 @@ export function paintBrushSegment(context, mapState, images, stroke, from, to, c
   }
   const textureId = stroke.erase ? mapState.baseTextureId : stroke.textureId;
   const texture = getMapTexture(textureId, mapState.textures || []);
-  if (!stroke.erase && texture.brushMode === "cluster") {
+  if (!stroke.erase && (texture.brushMode === "forest" || texture.brushMode === "cluster")) {
     const forestBrushState = brushState || cache?.forestBrushState || {};
     if (!brushState && cache) cache.forestBrushState = forestBrushState;
     paintForestBrushSegment(context, mapState, images, stroke, from, to, forestBrushState);
@@ -369,11 +502,19 @@ export function findCountryAtPoint(countries, point) {
   return null;
 }
 
-export function renderMapCanvas(context, mapState, images, includeCities = true, selectedCountryId = null) {
+export function renderMapCanvas(
+  context,
+  mapState,
+  images,
+  includeCities = true,
+  selectedCountryId = null,
+  patternCache = new Map(),
+) {
   const { width, height } = mapState;
-  const patternCache = new Map();
   const baseTexture = getMapTexture(mapState.baseTextureId, mapState.textures || []);
-  const basePattern = getPattern(context, mapState.baseTextureId, mapState, images, patternCache, 0.66);
+  const basePattern = baseTexture.brushMode === "forest"
+    ? null
+    : getPattern(context, mapState.baseTextureId, mapState, images, patternCache, 0.66);
   context.save();
   context.globalAlpha = 1;
   context.fillStyle = FALLBACK_COLORS[baseTexture.category] || FALLBACK_COLORS.земля;
@@ -384,6 +525,8 @@ export function renderMapCanvas(context, mapState, images, includeCities = true,
   }
   context.restore();
 
+  const forestOccupancy = createForestOccupancy();
+  seedForestOccupancyWithStamps(forestOccupancy, mapState, images);
   for (const stroke of mapState.strokes) {
     if (stroke.kind === "wall") {
       context.save();
@@ -394,8 +537,8 @@ export function renderMapCanvas(context, mapState, images, includeCities = true,
     }
     const textureId = stroke.erase ? mapState.baseTextureId : stroke.textureId;
     const texture = getMapTexture(textureId, mapState.textures || []);
-    if (!stroke.erase && texture.brushMode === "cluster") {
-      drawForestBrushStroke(context, mapState, images, stroke);
+    if (!stroke.erase && (texture.brushMode === "forest" || texture.brushMode === "cluster")) {
+      drawForestBrushStroke(context, mapState, images, stroke, forestOccupancy);
       continue;
     }
     const pattern = getPattern(
@@ -457,8 +600,8 @@ export function renderHeightMap(context, mapState) {
       traceSmoothPath(context, stroke.points, width, height);
       context.stroke();
     } else {
-      const strokeWidth = texture.brushMode === "cluster"
-        ? Math.max(56, Math.min(240, stroke.size * height * 2.15))
+      const strokeWidth = texture.brushMode === "cluster" || texture.brushMode === "forest"
+        ? Math.max(56, Math.min(340, stroke.size * height * 2.15))
         : Math.max(2, stroke.size * height);
       context.lineCap = "round";
       context.lineJoin = "round";

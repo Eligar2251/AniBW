@@ -5,6 +5,7 @@ export const MAP_CANVAS_PRESETS = [
   { label: "Маленький · 800 × 600", width: 800, height: 600 },
   { label: "Средний · 1200 × 800", width: 1200, height: 800 },
   { label: "Большой · 1600 × 1000", width: 1600, height: 1000 },
+  { label: "Материк · 2048 × 1280", width: 2048, height: 1280 },
 ];
 export const MAP_SIZE_PRESETS = MAP_CANVAS_PRESETS;
 
@@ -30,6 +31,15 @@ const objectStamp = (id, label, image, elevation, defaultSize, placement = "stam
   defaultSize,
 });
 
+const forestTerrain = (id, label, image, elevation, forestDensity, forestTreeIds) => ({
+  ...terrain(id, label, image, elevation, "лес", "forest"),
+  forestDensity,
+  forestTreeSize: 0.085,
+  forestTreeIds,
+});
+
+const FOREST_TREE_VARIANTS = ["tree", "kenney-tree-01", "kenney-tree-03"];
+
 export const DEFAULT_MAP_TEXTURES = [
   terrain("grass", "Зелёные луга", "grass", 0.13),
   terrain("meadow", "Цветущий луг", "meadow", 0.15),
@@ -39,9 +49,9 @@ export const DEFAULT_MAP_TEXTURES = [
   terrain("shallow-water", "Мелководье", "shallow-water", -0.12, "вода"),
   terrain("shore", "Берег", "shore", -0.01, "вода"),
   terrain("stone", "Камни", "stone", 0.17),
-  terrain("forest", "Редкий лес", "forest", 0.23, "лес", "cluster", 0.52),
-  terrain("dense-forest", "Хвойный лес", "dense-forest", 0.31, "лес", "cluster", 0.4),
-  terrain("mixed-forest", "Смешанный лес · Kenney", "medieval-forest", 0.27, "лес", "cluster", 0.44),
+  forestTerrain("forest", "Лес", "forest", 0.23, 0.82, FOREST_TREE_VARIANTS),
+  forestTerrain("dense-forest", "Густой лес", "dense-forest", 0.31, 1, ["tree", "kenney-tree-03"]),
+  forestTerrain("mixed-forest", "Смешанный лес · Kenney", "medieval-forest", 0.27, 0.92, ["tree", "kenney-tree-01", "kenney-tree-02", "kenney-tree-03"]),
   terrain("foothills", "Предгорья", "foothills", 0.48, "горы"),
   terrain("mountain", "Снежные горы", "mountain", 0.88, "горы"),
   terrain("village-ground", "Деревенские угодья", "village-ground", 0.15),
@@ -300,6 +310,9 @@ export function normalizeMapState(value) {
         opacity: Math.min(1, Math.max(0.05, Number(stroke.opacity) || 1)),
         kind: stroke.kind === "wall" ? "wall" : "brush",
         erase: Boolean(stroke.erase),
+        ...(Number.isFinite(Number(stroke.forestDensity))
+          ? { forestDensity: Math.min(1, Math.max(0.65, Number(stroke.forestDensity))) }
+          : {}),
         points,
       };
     })
